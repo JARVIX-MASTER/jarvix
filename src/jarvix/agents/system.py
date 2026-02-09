@@ -738,3 +738,28 @@ def execute_command(cmd_json):
         from jarvix.features.web_automation import stop_browser
         stop_browser()
         return {"status": "Browser closed"}
+    
+    # --- USER PROFILE & FORM FILL ACTIONS ---
+    elif action == "fill_form_auto":
+        from jarvix.features.web_automation import web_automation
+        from jarvix.features.user_profile import get_form_data
+        form_data = get_form_data()
+        if not form_data:
+            return {"error": "No profile saved. Use /save_profile first."}
+        return web_automation.fill_form(form_data)
+    
+    elif action == "save_profile":
+        from jarvix.features.user_profile import save_profile
+        data = cmd_json.get("data", {})
+        if save_profile(data):
+            return {"success": True, "saved": list(data.keys())}
+        return {"success": False, "error": "Failed to save profile"}
+    
+    elif action == "get_profile":
+        from jarvix.features.user_profile import get_profile_display
+        return {"profile": get_profile_display()}
+    
+    elif action == "clear_profile":
+        from jarvix.features.user_profile import clear_profile
+        clear_profile()
+        return {"status": "Profile cleared"}

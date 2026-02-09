@@ -1,18 +1,17 @@
 """
 JARVIX Web Automation Module
 Advanced browser automation using Playwright for web interactions.
+Uses SYNC API to avoid event loop conflicts with Telegram's async runtime.
 """
 
-import asyncio
 import os
-import base64
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Dict, List, Any
+from typing import Optional, Dict, Any
 
-# Playwright import with fallback
+# Playwright import with fallback - using SYNC API
 try:
-    from playwright.async_api import async_playwright, Browser, BrowserContext, Page
+    from playwright.sync_api import sync_playwright, Browser, BrowserContext, Page
     PLAYWRIGHT_AVAILABLE = True
 except ImportError:
     PLAYWRIGHT_AVAILABLE = False
@@ -22,7 +21,7 @@ except ImportError:
 class WebAutomation:
     """
     Playwright-based browser automation for JARVIX.
-    Supports web search, page reading, form filling, and e-commerce actions.
+    Uses SYNC API to work properly with Telegram's async event loop.
     """
     
     def __init__(self):
@@ -34,43 +33,46 @@ class WebAutomation:
         self.screenshot_dir = Path(os.environ.get('TEMP', '.')) / 'jarvix_screenshots'
         self.screenshot_dir.mkdir(exist_ok=True)
     
-    async def start_browser(self, headless: bool = False) -> bool:
-        """
-        Launch browser instance.
-        Args:
-            headless: If True, browser runs invisibly
-        """
+    def start_browser(self, headless: bool = False) -> bool:
+        """Launch browser instance."""
         if not PLAYWRIGHT_AVAILABLE:
             return False
         
-        if self.is_running:
-            return True
+        if self.is_running and self.page:
+            try:
+                # Test if connection is still alive
+                self.page.title()
+                return True
+            except:
+                # Connection dead, restart
+                self.is_running = False
         
         try:
-            self.playwright = await async_playwright().start()
-            self.browser = await self.playwright.chromium.launch(
+            self.playwright = sync_playwright().start()
+            self.browser = self.playwright.chromium.launch(
                 headless=headless,
                 args=['--disable-blink-features=AutomationControlled']
             )
-            self.context = await self.browser.new_context(
+            self.context = self.browser.new_context(
                 viewport={'width': 1280, 'height': 800},
                 user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
             )
-            self.page = await self.context.new_page()
+            self.page = self.context.new_page()
             self.is_running = True
             print("✅ Browser started successfully")
             return True
         except Exception as e:
             print(f"❌ Failed to start browser: {e}")
+            self.is_running = False
             return False
     
-    async def stop_browser(self) -> None:
+    def stop_browser(self) -> None:
         """Close browser and cleanup resources."""
         try:
             if self.browser:
-                await self.browser.close()
+                self.browser.close()
             if self.playwright:
-                await self.playwright.stop()
+                self.playwright.stop()
         except Exception as e:
             print(f"⚠️ Error closing browser: {e}")
         finally:
@@ -81,39 +83,37 @@ class WebAutomation:
             self.is_running = False
             print("🛑 Browser stopped")
     
-    async def ensure_browser(self, headless: bool = False) -> bool:
+    def ensure_browser(self, headless: bool = False) -> bool:
         """Ensure browser is running, start if needed."""
-        if not self.is_running:
-            return await self.start_browser(headless)
-        return True
+        if not self.is_running or not self.page:
+            return self.start_browser(headless)
+        
+        # Verify connection is alive
+        try:
+            self.page.title()
+            return True
+        except:
+            self.is_running = False
+            return self.start_browser(headless)
     
-    async def navigate(self, url: str, wait_for: str = 'domcontentloaded') -> bool:
-        """
-        Navigate to URL.
-        Args:
-            url: Target URL
-            wait_for: Wait condition ('load', 'domcontentloaded', 'networkidle')
-        """
-        if not await self.ensure_browser():
+    def navigate(self, url: str, wait_for: str = 'domcontentloaded') -> bool:
+        """Navigate to URL."""
+        if not self.ensure_browser():
             return False
         
         try:
-            # Add https if missing
             if not url.startswith(('http://', 'https://')):
                 url = 'https://' + url
             
-            await self.page.goto(url, wait_until=wait_for, timeout=30000)
+            self.page.goto(url, wait_until=wait_for, timeout=30000)
             print(f"✅ Navigated to: {url}")
             return True
         except Exception as e:
             print(f"❌ Navigation failed: {e}")
             return False
     
-    async def screenshot(self, filename: str = None) -> Optional[str]:
-        """
-        Take screenshot of current page.
-        Returns: Path to screenshot file
-        """
+    def screenshot(self, filename: str = None) -> Optional[str]:
+        """Take screenshot of current page."""
         if not self.page:
             return None
         
@@ -122,79 +122,72 @@ class WebAutomation:
                 filename = f"browser_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
             
             filepath = self.screenshot_dir / filename
-            await self.page.screenshot(path=str(filepath), full_page=False)
+            self.page.screenshot(path=str(filepath), full_page=False)
             print(f"📸 Screenshot saved: {filepath}")
             return str(filepath)
         except Exception as e:
             print(f"❌ Screenshot failed: {e}")
             return None
     
-    async def get_page_title(self) -> str:
+    def get_page_title(self) -> str:
         """Get current page title."""
         if self.page:
-            return await self.page.title()
+            try:
+                return self.page.title()
+            except:
+                return ""
         return ""
     
-    async def get_page_text(self) -> str:
+    def get_page_text(self) -> str:
         """Extract visible text content from page."""
         if not self.page:
             return ""
         
         try:
-            # Extract main content text
-            text = await self.page.evaluate('''() => {
-                // Try to find main content area
+            text = self.page.evaluate('''() => {
                 const main = document.querySelector('main, article, [role="main"], .content, #content');
                 if (main) return main.innerText;
                 
-                // Fallback to body, but remove scripts/styles
                 const body = document.body.cloneNode(true);
                 const scripts = body.querySelectorAll('script, style, nav, header, footer, aside');
                 scripts.forEach(el => el.remove());
                 return body.innerText;
             }''')
-            return text[:5000]  # Limit to 5000 chars
+            return text[:5000]
         except Exception as e:
             print(f"⚠️ Error extracting text: {e}")
             return ""
     
     # ==================== WEB SEARCH ====================
     
-    async def web_search(self, query: str) -> Dict[str, Any]:
-        """
-        Perform Google search and extract results.
-        Args:
-            query: Search query
-        Returns:
-            Dict with results list and screenshot path
-        """
-        if not await self.ensure_browser():
+    def web_search(self, query: str) -> Dict[str, Any]:
+        """Perform Google search and extract results."""
+        if not self.ensure_browser():
             return {"error": "Browser not available", "results": []}
         
         try:
-            # Navigate to Google
-            await self.page.goto('https://www.google.com', wait_until='domcontentloaded')
+            self.page.goto('https://www.google.com', wait_until='domcontentloaded')
             
-            # Accept cookies if prompted (region-dependent)
+            # Accept cookies if prompted
             try:
                 accept_btn = self.page.locator('button:has-text("Accept all")')
-                if await accept_btn.count() > 0:
-                    await accept_btn.click()
-                    await self.page.wait_for_timeout(500)
+                if accept_btn.count() > 0:
+                    accept_btn.click()
+                    self.page.wait_for_timeout(500)
             except:
                 pass
             
             # Type search query
             search_input = self.page.locator('textarea[name="q"], input[name="q"]')
-            await search_input.fill(query)
-            await search_input.press('Enter')
+            search_input.fill(query)
+            search_input.press('Enter')
             
             # Wait for results
-            await self.page.wait_for_selector('#search', timeout=10000)
-            await self.page.wait_for_timeout(1000)  # Let results fully load
+            self.page.wait_for_selector('#search', timeout=10000)
+            self.page.wait_for_timeout(1000)
             
             # Extract search results
-            results = await self.page.evaluate('''() => {
+            results = self.page.evaluate('''() => {
                 const items = [];
                 const resultDivs = document.querySelectorAll('#search .g');
                 
@@ -216,7 +209,8 @@ class WebAutomation:
             }''')
             
             # Take screenshot
-            screenshot_path = await self.screenshot(f"search_{query[:20].replace(' ', '_')}.png")
+            safe_query = "".join(c if c.isalnum() or c == ' ' else '_' for c in query[:20])
+            screenshot_path = self.screenshot(f"search_{safe_query.replace(' ', '_')}.png")
             
             return {
                 "query": query,
@@ -231,23 +225,17 @@ class WebAutomation:
     
     # ==================== PAGE READING ====================
     
-    async def read_page(self, url: str) -> Dict[str, Any]:
-        """
-        Navigate to URL and extract content.
-        Args:
-            url: Page URL to read
-        Returns:
-            Dict with title, text content, and screenshot
-        """
-        if not await self.navigate(url):
+    def read_page(self, url: str) -> Dict[str, Any]:
+        """Navigate to URL and extract content."""
+        if not self.navigate(url):
             return {"error": "Navigation failed"}
         
         try:
-            await self.page.wait_for_timeout(2000)  # Let page load
+            self.page.wait_for_timeout(2000)
             
-            title = await self.get_page_title()
-            text = await self.get_page_text()
-            screenshot_path = await self.screenshot()
+            title = self.get_page_title()
+            text = self.get_page_text()
+            screenshot_path = self.screenshot()
             
             return {
                 "url": url,
@@ -260,15 +248,8 @@ class WebAutomation:
     
     # ==================== FORM FILLING ====================
     
-    async def fill_form(self, form_data: Dict[str, str]) -> Dict[str, Any]:
-        """
-        Fill form fields on current page.
-        Args:
-            form_data: Dict mapping field identifiers to values
-                       e.g., {"email": "user@email.com", "name": "John"}
-        Returns:
-            Dict with filled fields and screenshot
-        """
+    def fill_form(self, form_data: Dict[str, str]) -> Dict[str, Any]:
+        """Fill form fields on current page."""
         if not self.page:
             return {"error": "No page open"}
         
@@ -277,21 +258,19 @@ class WebAutomation:
         
         try:
             for field_name, value in form_data.items():
-                # Try multiple selector strategies
                 selectors = [
                     f'input[name="{field_name}"]',
                     f'input[id="{field_name}"]',
                     f'input[placeholder*="{field_name}" i]',
                     f'textarea[name="{field_name}"]',
-                    f'input[type="text"]:near(:text("{field_name}"))',
                 ]
                 
                 field_filled = False
                 for selector in selectors:
                     try:
                         locator = self.page.locator(selector).first
-                        if await locator.count() > 0:
-                            await locator.fill(value)
+                        if locator.count() > 0:
+                            locator.fill(value)
                             filled.append(field_name)
                             field_filled = True
                             break
@@ -301,7 +280,7 @@ class WebAutomation:
                 if not field_filled:
                     failed.append(field_name)
             
-            screenshot_path = await self.screenshot("form_filled.png")
+            screenshot_path = self.screenshot("form_filled.png")
             
             return {
                 "filled": filled,
@@ -313,62 +292,54 @@ class WebAutomation:
     
     # ==================== E-COMMERCE ====================
     
-    async def amazon_add_to_cart(self, product_query: str) -> Dict[str, Any]:
-        """
-        Search Amazon and add first result to cart.
-        Args:
-            product_query: Product to search for
-        Returns:
-            Dict with product info and screenshot
-        """
-        if not await self.ensure_browser():
+    def amazon_add_to_cart(self, product_query: str) -> Dict[str, Any]:
+        """Search Amazon and add first result to cart."""
+        if not self.ensure_browser():
             return {"error": "Browser not available"}
         
         try:
-            # Navigate to Amazon India
-            await self.page.goto('https://www.amazon.in', wait_until='domcontentloaded')
-            await self.page.wait_for_timeout(2000)
+            self.page.goto('https://www.amazon.in', wait_until='domcontentloaded')
+            self.page.wait_for_timeout(2000)
             
             # Search for product
             search_box = self.page.locator('#twotabsearchtextbox')
-            await search_box.fill(product_query)
-            await search_box.press('Enter')
+            search_box.fill(product_query)
+            search_box.press('Enter')
             
             # Wait for results
-            await self.page.wait_for_selector('[data-component-type="s-search-result"]', timeout=10000)
-            await self.page.wait_for_timeout(1500)
+            self.page.wait_for_selector('[data-component-type="s-search-result"]', timeout=10000)
+            self.page.wait_for_timeout(1500)
             
             # Click first product
             first_product = self.page.locator('[data-component-type="s-search-result"]').first
-            product_title = await first_product.locator('h2 a span').first.text_content()
-            await first_product.locator('h2 a').first.click()
+            first_product.locator('h2 a').first.click()
             
             # Wait for product page
-            await self.page.wait_for_selector('#productTitle', timeout=10000)
-            await self.page.wait_for_timeout(1500)
+            self.page.wait_for_selector('#productTitle', timeout=10000)
+            self.page.wait_for_timeout(1500)
             
             # Get product info
-            title = await self.page.locator('#productTitle').text_content()
+            title = self.page.locator('#productTitle').text_content()
             title = title.strip() if title else product_query
             
             # Try to get price
             price = ""
             try:
                 price_elem = self.page.locator('.a-price-whole').first
-                if await price_elem.count() > 0:
-                    price = await price_elem.text_content()
+                if price_elem.count() > 0:
+                    price = price_elem.text_content()
             except:
                 pass
             
             # Take screenshot before adding
-            await self.screenshot("product_page.png")
+            self.screenshot("product_page.png")
             
             # Click Add to Cart
             add_btn = self.page.locator('#add-to-cart-button')
-            if await add_btn.count() > 0:
-                await add_btn.click()
-                await self.page.wait_for_timeout(2000)
-                screenshot_path = await self.screenshot("added_to_cart.png")
+            if add_btn.count() > 0:
+                add_btn.click()
+                self.page.wait_for_timeout(2000)
+                screenshot_path = self.screenshot("added_to_cart.png")
                 
                 return {
                     "success": True,
@@ -386,112 +357,40 @@ class WebAutomation:
         except Exception as e:
             print(f"❌ Amazon add to cart failed: {e}")
             return {"success": False, "error": str(e)}
-    
-    # ==================== UTILITY METHODS ====================
-    
-    async def click_element(self, selector_or_text: str) -> bool:
-        """Click an element by selector or visible text."""
-        if not self.page:
-            return False
-        
-        try:
-            # Try as selector first
-            locator = self.page.locator(selector_or_text)
-            if await locator.count() > 0:
-                await locator.first.click()
-                return True
-            
-            # Try as text
-            locator = self.page.get_by_text(selector_or_text, exact=False)
-            if await locator.count() > 0:
-                await locator.first.click()
-                return True
-            
-            return False
-        except Exception as e:
-            print(f"❌ Click failed: {e}")
-            return False
-    
-    async def type_text(self, selector: str, text: str) -> bool:
-        """Type text into an input field."""
-        if not self.page:
-            return False
-        
-        try:
-            await self.page.locator(selector).first.fill(text)
-            return True
-        except Exception as e:
-            print(f"❌ Type failed: {e}")
-            return False
 
 
 # Singleton instance
 web_automation = WebAutomation()
 
 
-# ==================== SYNC WRAPPERS ====================
-# These allow calling async methods from sync context
+# ==================== SIMPLE WRAPPERS ====================
+# Direct function calls - no async/event loop issues
 
 def run_web_search(query: str) -> Dict[str, Any]:
-    """Sync wrapper for web search."""
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        result = loop.run_until_complete(web_automation.web_search(query))
-        return result
-    finally:
-        loop.close()
+    """Run web search."""
+    return web_automation.web_search(query)
 
 
 def run_read_page(url: str) -> Dict[str, Any]:
-    """Sync wrapper for page reading."""
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        result = loop.run_until_complete(web_automation.read_page(url))
-        return result
-    finally:
-        loop.close()
+    """Read a webpage."""
+    return web_automation.read_page(url)
 
 
 def run_fill_form(form_data: Dict[str, str]) -> Dict[str, Any]:
-    """Sync wrapper for form filling."""
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        result = loop.run_until_complete(web_automation.fill_form(form_data))
-        return result
-    finally:
-        loop.close()
+    """Fill form on current page."""
+    return web_automation.fill_form(form_data)
 
 
 def run_amazon_add_to_cart(product: str) -> Dict[str, Any]:
-    """Sync wrapper for Amazon add to cart."""
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        result = loop.run_until_complete(web_automation.amazon_add_to_cart(product))
-        return result
-    finally:
-        loop.close()
+    """Add product to Amazon cart."""
+    return web_automation.amazon_add_to_cart(product)
 
 
 def run_browser_screenshot() -> Optional[str]:
-    """Sync wrapper for taking screenshot."""
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        result = loop.run_until_complete(web_automation.screenshot())
-        return result
-    finally:
-        loop.close()
+    """Take browser screenshot."""
+    return web_automation.screenshot()
 
 
 def stop_browser():
-    """Sync wrapper to stop browser."""
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        loop.run_until_complete(web_automation.stop_browser())
-    finally:
-        loop.close()
+    """Stop the browser."""
+    web_automation.stop_browser()

@@ -56,19 +56,23 @@ logging.basicConfig(
 )
 
 def get_main_keyboard():
-    # Combined keyboard: Includes old buttons + new "/copied_texts" + Gmail buttons
+    # Combined keyboard with all features
     keyboard = [
         [KeyboardButton("/screenshot"), KeyboardButton("/camera_on"), KeyboardButton("/camera_off")],
-        [KeyboardButton("🚨 PANIC")], #EMERGENCY PANIC BUTTON (Dedicated Row Panicccc)
-        [KeyboardButton("/sleep"), KeyboardButton("/restart"), KeyboardButton("/shutdown")], # <--- System Controls
+        [KeyboardButton("🚨 PANIC")], #EMERGENCY PANIC BUTTON
+        [KeyboardButton("/sleep"), KeyboardButton("/restart"), KeyboardButton("/shutdown")],
         [KeyboardButton("/batterypercentage"), KeyboardButton("/systemhealth")],
         [KeyboardButton("/location"), KeyboardButton("/recordaudio")],
         [KeyboardButton("/clear_bin"), KeyboardButton("/storage")], 
         [KeyboardButton("/activities"), KeyboardButton("/copied_texts")],
         [KeyboardButton("/focus_mode_on"), KeyboardButton("/blacklist")],
-        # --- GMAIL AUTOMATION SHORTCUTS ---
-        [KeyboardButton("/emails"), KeyboardButton("/upcoming")],
-        [KeyboardButton("/unsubscribe")]
+        # --- GMAIL SHORTCUTS ---
+        [KeyboardButton("/emails"), KeyboardButton("/upcoming"), KeyboardButton("/unsubscribe")],
+        # --- WEB AUTOMATION SHORTCUTS ---
+        [KeyboardButton("/search"), KeyboardButton("/browse"), KeyboardButton("/addcart")],
+        [KeyboardButton("/fill_form"), KeyboardButton("/browser_screenshot")],
+        # --- PROFILE SHORTCUTS ---
+        [KeyboardButton("/my_profile"), KeyboardButton("/save_profile")],
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
@@ -284,6 +288,32 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     elif "/stop_browser" in lower_text or "close browser" in lower_text:
         command_json = {"action": "stop_browser"}
+    
+    # --- USER PROFILE & FORM FILL COMMANDS ---
+    elif "/fill_form" in lower_text or any(x in lower_text for x in ["fill form", "fill this form", "autofill", "auto fill"]):
+        command_json = {"action": "fill_form_auto"}
+    
+    elif "/my_profile" in lower_text or "/profile" in lower_text or "show my profile" in lower_text:
+        command_json = {"action": "get_profile"}
+    
+    elif "/clear_profile" in lower_text:
+        command_json = {"action": "clear_profile"}
+    
+    elif "/save_profile" in lower_text or "save my profile" in lower_text:
+        # Parse profile data from message
+        # Format: /save_profile name=John email=john@email.com phone=123456
+        profile_data = {}
+        parts = text.split()
+        for part in parts:
+            if "=" in part:
+                key, value = part.split("=", 1)
+                profile_data[key.lower().strip()] = value.strip()
+        
+        if profile_data:
+            command_json = {"action": "save_profile", "data": profile_data}
+        else:
+            # No data provided, show help
+            command_json = {"action": "profile_help"}
 
     # Show processing message (with error handling)
     status_msg = None
@@ -1006,6 +1036,77 @@ Quick Commands:
             if status_msg: await status_msg.delete()
             execute_command(command_json)
             await update.message.reply_text("🛑 Browser closed.", reply_markup=get_main_keyboard())
+        
+        # --- USER PROFILE & FORM FILL HANDLERS ---
+        elif action == "fill_form_auto":
+            if status_msg: await status_msg.delete()
+            loader = await update.message.reply_text("📝 Auto-filling form with your profile...", reply_markup=get_main_keyboard())
+            
+            loop = asyncio.get_running_loop()
+            result = await loop.run_in_executor(None, execute_command, command_json)
+            
+            await loader.delete()
+            
+            if result and "error" not in result:
+                filled = result.get("filled", [])
+                failed = result.get("failed", [])
+                screenshot_path = result.get("screenshot")
+                
+                message = f"✅ Form filled!\n\n📝 Filled: {', '.join(filled) if filled else 'None'}"
+                if failed:
+                    message += f"\n❌ Could not fill: {', '.join(failed)}"
+                
+                if screenshot_path and os.path.exists(screenshot_path):
+                    await update.message.reply_photo(
+                        photo=open(screenshot_path, 'rb'),
+                        caption=message,
+                        reply_markup=get_main_keyboard()
+                    )
+                else:
+                    await update.message.reply_text(message, reply_markup=get_main_keyboard())
+            else:
+                error = result.get('error', 'Unknown error') if result else 'No browser open'
+                await update.message.reply_text(f"❌ {error}", reply_markup=get_main_keyboard())
+        
+        elif action == "save_profile":
+            if status_msg: await status_msg.delete()
+            result = execute_command(command_json)
+            
+            if result and result.get("success"):
+                saved = result.get("saved", [])
+                await update.message.reply_text(f"✅ Profile saved!\n\nSaved fields: {', '.join(saved)}", reply_markup=get_main_keyboard())
+            else:
+                await update.message.reply_text("❌ Failed to save profile.", reply_markup=get_main_keyboard())
+        
+        elif action == "get_profile":
+            if status_msg: await status_msg.delete()
+            result = execute_command(command_json)
+            profile_text = result.get("profile", "No profile found") if result else "Error"
+            await update.message.reply_text(profile_text, reply_markup=get_main_keyboard())
+        
+        elif action == "clear_profile":
+            if status_msg: await status_msg.delete()
+            execute_command(command_json)
+            await update.message.reply_text("🗑️ Profile cleared.", reply_markup=get_main_keyboard())
+        
+        elif action == "profile_help":
+            if status_msg: await status_msg.delete()
+            help_text = """📋 **How to Save Your Profile:**
+
+Use this format:
+`/save_profile name=John email=john@email.com phone=9876543210`
+
+**Available fields:**
+• name, first_name, last_name
+• email, phone
+• address, city, state, pincode, country
+• company
+
+**Other commands:**
+• `/my_profile` - View saved profile
+• `/fill_form` - Auto-fill form on current page
+• `/clear_profile` - Delete all saved data"""
+            await update.message.reply_text(help_text, parse_mode='Markdown', reply_markup=get_main_keyboard())
         # ----------------------------------------
 
         # --- BROWSER CONTROL (Smart Tab Management) ---
