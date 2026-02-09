@@ -257,6 +257,34 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif "/unsubscribe" in lower_text or "/promotional" in lower_text or any(x in lower_text for x in ["promotional emails", "spam", "unsubscribe", "cancel subscriptions", "marketing emails"]):
         command_json = {"action": "get_promotional"}
 
+    # --- WEB AUTOMATION COMMANDS ---
+    elif "/search" in lower_text or any(x in lower_text for x in ["search for", "google", "look up", "find online", "web search"]):
+        # Extract search query - remove trigger words
+        query = lower_text
+        for trigger in ["/search", "search for", "google", "look up", "find online", "web search"]:
+            query = query.replace(trigger, "").strip()
+        command_json = {"action": "web_search", "query": query if query else "latest news"}
+    
+    elif "/browse" in lower_text or any(x in lower_text for x in ["go to website", "open url", "navigate to site", "visit site"]):
+        # Extract URL
+        import re
+        url_match = re.search(r'(https?://\S+|www\.\S+|\S+\.(com|org|net|io|in|co))', lower_text)
+        url = url_match.group(0) if url_match else ""
+        command_json = {"action": "browse_url", "url": url}
+    
+    elif "/addcart" in lower_text or "/add_cart" in lower_text or any(x in lower_text for x in ["add to cart", "add to amazon", "buy from amazon", "order from amazon"]):
+        # Extract product name
+        product = lower_text
+        for trigger in ["/addcart", "/add_cart", "add to cart", "add to amazon cart", "buy from amazon", "order from amazon", "add to amazon"]:
+            product = product.replace(trigger, "").strip()
+        command_json = {"action": "add_to_cart", "product": product if product else ""}
+    
+    elif "/browser_screenshot" in lower_text or any(x in lower_text for x in ["show browser", "browser screenshot", "what's on the page"]):
+        command_json = {"action": "browser_screenshot"}
+    
+    elif "/stop_browser" in lower_text or "close browser" in lower_text:
+        command_json = {"action": "stop_browser"}
+
     # Show processing message (with error handling)
     status_msg = None
     try:
@@ -756,14 +784,22 @@ Quick Commands:
             interview_data = await loop.run_in_executor(None, execute_command, command_json)
             
             if interview_data is None:
-                await loader.edit_text("❌ Failed to connect to Gmail. Check credentials in .env", reply_markup=get_main_keyboard())
+                try:
+                    await loader.edit_text("❌ Failed to connect to Gmail. Check credentials in .env", reply_markup=get_main_keyboard())
+                except:
+                    await loader.delete()
+                    await update.message.reply_text("❌ Failed to connect to Gmail. Check credentials in .env", reply_markup=get_main_keyboard())
                 return
             
             with_dates = interview_data.get("with_dates", [])
             recent = interview_data.get("recent_interviews", [])
             
             if not with_dates and not recent:
-                await loader.edit_text("📅 No interview emails found.\n\nNo emails matching interview-related keywords were found in your recent inbox.", reply_markup=get_main_keyboard())
+                try:
+                    await loader.edit_text("📅 No interview emails found.\n\nNo emails matching interview-related keywords were found in your recent inbox.", reply_markup=get_main_keyboard())
+                except:
+                    await loader.delete()
+                    await update.message.reply_text("📅 No interview emails found.\n\nNo emails matching interview-related keywords were found in your recent inbox.", reply_markup=get_main_keyboard())
                 return
             
             message_text = "📅 UPCOMING INTERVIEWS\n\n"
@@ -854,6 +890,122 @@ Quick Commands:
                 print(f"Edit text error: {e}")
                 await loader.delete()
                 await update.message.reply_text(message_text, reply_markup=get_main_keyboard())
+        # ----------------------------------------
+
+        # --- WEB AUTOMATION HANDLERS ---
+        elif action == "web_search":
+            if status_msg: await status_msg.delete()
+            query = command_json.get("query", "")
+            loader = await update.message.reply_text(f"🔍 Searching for: {query}...", reply_markup=get_main_keyboard())
+            
+            loop = asyncio.get_running_loop()
+            result = await loop.run_in_executor(None, execute_command, command_json)
+            
+            if result and "error" not in result:
+                results = result.get("results", [])
+                screenshot_path = result.get("screenshot")
+                
+                message_text = f"🔍 SEARCH RESULTS: {query}\n\n"
+                for i, r in enumerate(results[:5], 1):
+                    title = escape_markdown(r.get('title', 'No title')[:50])
+                    snippet = escape_markdown(r.get('snippet', '')[:80])
+                    message_text += f"*{i}. {title}*\n{snippet}\n\n"
+                
+                await loader.delete()
+                
+                if screenshot_path and os.path.exists(screenshot_path):
+                    await update.message.reply_photo(
+                        photo=open(screenshot_path, 'rb'),
+                        caption=message_text[:1000],
+                        parse_mode='Markdown',
+                        reply_markup=get_main_keyboard()
+                    )
+                else:
+                    await update.message.reply_text(message_text, parse_mode='Markdown', reply_markup=get_main_keyboard())
+            else:
+                await loader.edit_text(f"❌ Search failed: {result.get('error', 'Unknown error')}", reply_markup=get_main_keyboard())
+        
+        elif action == "browse_url":
+            if status_msg: await status_msg.delete()
+            url = command_json.get("url", "")
+            loader = await update.message.reply_text(f"🌐 Reading page: {url[:50]}...", reply_markup=get_main_keyboard())
+            
+            loop = asyncio.get_running_loop()
+            result = await loop.run_in_executor(None, execute_command, command_json)
+            
+            if result and "error" not in result:
+                title = escape_markdown(result.get('title', 'No title'))
+                content = result.get('content', '')[:1500]
+                content = escape_markdown(content)
+                screenshot_path = result.get("screenshot")
+                
+                message_text = f"🌐 *{title}*\n\n{content}..."
+                
+                await loader.delete()
+                
+                if screenshot_path and os.path.exists(screenshot_path):
+                    await update.message.reply_photo(
+                        photo=open(screenshot_path, 'rb'),
+                        caption=message_text[:1000],
+                        parse_mode='Markdown',
+                        reply_markup=get_main_keyboard()
+                    )
+                else:
+                    await update.message.reply_text(message_text, parse_mode='Markdown', reply_markup=get_main_keyboard())
+            else:
+                await loader.edit_text(f"❌ Failed to read page: {result.get('error', 'Unknown')}", reply_markup=get_main_keyboard())
+        
+        elif action == "add_to_cart":
+            if status_msg: await status_msg.delete()
+            product = command_json.get("product", "")
+            loader = await update.message.reply_text(f"🛒 Adding to cart: {product}...\n\n⏳ This may take 15-30 seconds...", reply_markup=get_main_keyboard())
+            
+            loop = asyncio.get_running_loop()
+            result = await loop.run_in_executor(None, execute_command, command_json)
+            
+            if result and result.get("success"):
+                product_name = result.get('product', product)[:50]
+                price = result.get('price', 'N/A')
+                screenshot_path = result.get("screenshot")
+                
+                message_text = f"✅ ADDED TO CART!\n\n📦 {escape_markdown(product_name)}\n💰 ₹{price}"
+                
+                await loader.delete()
+                
+                if screenshot_path and os.path.exists(screenshot_path):
+                    await update.message.reply_photo(
+                        photo=open(screenshot_path, 'rb'),
+                        caption=message_text,
+                        reply_markup=get_main_keyboard()
+                    )
+                else:
+                    await update.message.reply_text(message_text, reply_markup=get_main_keyboard())
+            else:
+                error = result.get('error', 'Could not add to cart') if result else 'Browser error'
+                await loader.edit_text(f"❌ {error}", reply_markup=get_main_keyboard())
+        
+        elif action == "browser_screenshot":
+            if status_msg: await status_msg.delete()
+            loader = await update.message.reply_text("📸 Taking browser screenshot...", reply_markup=get_main_keyboard())
+            
+            loop = asyncio.get_running_loop()
+            screenshot_path = await loop.run_in_executor(None, execute_command, command_json)
+            
+            await loader.delete()
+            
+            if screenshot_path and os.path.exists(screenshot_path):
+                await update.message.reply_photo(
+                    photo=open(screenshot_path, 'rb'),
+                    caption="🖥️ Current browser view",
+                    reply_markup=get_main_keyboard()
+                )
+            else:
+                await update.message.reply_text("❌ No browser open or screenshot failed.", reply_markup=get_main_keyboard())
+        
+        elif action == "stop_browser":
+            if status_msg: await status_msg.delete()
+            execute_command(command_json)
+            await update.message.reply_text("🛑 Browser closed.", reply_markup=get_main_keyboard())
         # ----------------------------------------
 
         # --- BROWSER CONTROL (Smart Tab Management) ---

@@ -708,3 +708,33 @@ def execute_command(cmd_json):
     elif action == "get_promotional":
         from jarvix.features.gmail import GmailClient
         return GmailClient().get_promotional_emails()
+    
+    # --- WEB AUTOMATION ACTIONS ---
+    elif action == "web_search":
+        from jarvix.features.web_automation import run_web_search
+        query = cmd_json.get("query", "")
+        return run_web_search(query)
+    
+    elif action == "browse_url":
+        from jarvix.features.web_automation import run_read_page
+        url = cmd_json.get("url", "")
+        return run_read_page(url)
+    
+    elif action == "fill_form":
+        from jarvix.features.web_automation import run_fill_form
+        form_data = cmd_json.get("data", {})
+        return run_fill_form(form_data)
+    
+    elif action == "add_to_cart":
+        from jarvix.features.web_automation import run_amazon_add_to_cart
+        product = cmd_json.get("product", "")
+        return run_amazon_add_to_cart(product)
+    
+    elif action == "browser_screenshot":
+        from jarvix.features.web_automation import run_browser_screenshot
+        return run_browser_screenshot()
+    
+    elif action == "stop_browser":
+        from jarvix.features.web_automation import stop_browser
+        stop_browser()
+        return {"status": "Browser closed"}

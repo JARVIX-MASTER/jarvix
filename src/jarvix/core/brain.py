@@ -79,6 +79,18 @@ COMMANDS:
 21. Promotional/Unsubscribe: {"action": "get_promotional"}
     (Triggers: promotional emails, spam, unsubscribe, cancel subscriptions, marketing emails)
 
+22. Web Search: {"action": "web_search", "query": "search terms here"}
+    (Triggers: search for, google, look up, find online, search the web, web search)
+
+23. Browse URL: {"action": "browse_url", "url": "https://example.com"}
+    (Triggers: go to website, open url, navigate to, browse, visit site, open page)
+
+24. Add to Cart: {"action": "add_to_cart", "product": "product name"}
+    (Triggers: add to cart, buy, purchase, order from amazon, add to amazon cart)
+
+25. Browser Screenshot: {"action": "browser_screenshot"}
+    (Triggers: show browser, browser screenshot, what's on the page, show me the page)
+
 *** CRITICAL RULE: CONTEXT AWARENESS ***
 Use the [CURRENT CONTEXT STATE] below to resolve words like "it", "that", "the app", "the folder".
 - If user says "Close it" and Last Focused Tab is "YouTube" -> {"action": "browser_control", "command": "close", "query": "YouTube"} (PRIORITY over close_app)

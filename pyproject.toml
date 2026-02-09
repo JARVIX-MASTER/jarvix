@@ -40,6 +40,7 @@ dependencies = [
     "python-dotenv",
     "screen-brightness-control",
     "scipy",
+    "playwright",
 ]
 
 [project.scripts]
