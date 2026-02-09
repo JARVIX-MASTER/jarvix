@@ -178,7 +178,51 @@ class GoalPlanner:
             site = price_match.group(2) + (".in" if "amazon" in price_match.group(2) else ".com")
             return self._create_price_check_plan(site, product)
         
+        # Pattern: Simple "open youtube" or "open amazon.com"
+        simple_open_match = re.search(
+            r'(?:open|go\s+to|visit|browse)\s+(\S+)',
+            goal_lower
+        )
+        if simple_open_match:
+            target = simple_open_match.group(1).strip()
+            # Map short names to full URLs
+            if target in site_aliases:
+                target = site_aliases[target]
+            elif not any(x in target for x in ['.com', '.in', '.org', '.net', '.io', 'http']):
+                target = target + ".com"
+            
+            return self._create_simple_navigate_plan(target)
+        
         return None
+    
+    def _create_simple_navigate_plan(self, url: str) -> ActionPlan:
+        """Create a simple navigation plan (just open a site)."""
+        if not url.startswith("http"):
+            url = "https://" + url
+        
+        domain = url.replace("https://", "").replace("http://", "").split("/")[0]
+        
+        return ActionPlan(
+            goal=f"Open {domain}",
+            steps=[
+                ActionStep(
+                    action="navigate",
+                    params={"url": url},
+                    description=f"Open {domain}"
+                ),
+                ActionStep(
+                    action="wait",
+                    params={"ms": 500},
+                    description="Wait for page to load"
+                ),
+                ActionStep(
+                    action="screenshot",
+                    params={"name": f"page_{domain.replace('.', '_')}"},
+                    description="Capture page"
+                )
+            ],
+            estimated_time=3
+        )
     
     def _create_site_search_plan(self, site: str, query: str) -> ActionPlan:
         """Create a plan to search within a specific site."""

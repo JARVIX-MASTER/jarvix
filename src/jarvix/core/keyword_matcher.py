@@ -116,11 +116,18 @@ COMMAND_PATTERNS = {
         "extract_pattern": r"(?:search\s+(?:for\s+)?|google\s+|look\s+up\s+|find\s+online\s+|/search\s+)(.+)",
         "action_template": {"action": "web_search", "query": "$1"}
     },
-    "browse_url": {
+    # Multi-step browser goals (open X and search Y)
+    "browser_goal": {
+        "triggers": ["open", "go to", "visit"],
+        "multi_step_hints": ["and search", "and find", "then search", "then find", "and click", "and select"],
+        "extract_pattern": r"((?:open|go\s+to|visit)\s+.+(?:and|then)\s+.+)",
+        "action_template": {"action": "browser_agent", "goal": "$1"}
+    },
+    "browser_navigate": {
         "triggers": ["browse", "go to", "open", "visit", "navigate to", "/browse"],
-        "url_hints": [".com", ".in", ".org", ".net", ".io", "http", "www"],
+        "url_hints": [".com", ".in", ".org", ".net", ".io", "http", "www", "youtube", "amazon", "google", "flipkart", "github"],
         "extract_pattern": r"(?:browse\s+|go\s+to\s+|open\s+|visit\s+|navigate\s+to\s+|/browse\s+)(\S+)",
-        "action_template": {"action": "browse_url", "url": "$1"}
+        "action_template": {"action": "browser_navigate", "url": "$1"}
     },
     "add_to_cart": {
         "triggers": ["add to cart", "add to amazon", "buy from amazon", "order from amazon", "/addcart", "/add_cart"],
@@ -272,6 +279,13 @@ class KeywordMatcher:
         # Priority check: /agent command should always go to browser_agent
         if text_normalized.startswith("/agent ") or text_normalized.startswith("goal:") or text_normalized.startswith("agent:"):
             config = self.patterns.get("browser_agent", {})
+            if config and "extract_pattern" in config:
+                return self._extract_and_build(text, text_normalized, config)
+        
+        # Priority check: Multi-step browser commands (open X and search Y)
+        multi_step_hints = ["and search", "and find", "then search", "then find", "and click", "and select", "and add"]
+        if any(hint in text_normalized for hint in multi_step_hints):
+            config = self.patterns.get("browser_goal", {})
             if config and "extract_pattern" in config:
                 return self._extract_and_build(text, text_normalized, config)
         

@@ -966,7 +966,106 @@ Quick Commands:
         elif action == "stop_browser":
             if status_msg: await status_msg.delete()
             execute_command(command_json)
+            # Also reset browser context
+            from jarvix.core.state_manager import state_manager
+            state_manager.browser_context.mark_closed()
             await update.message.reply_text("🛑 Browser closed.", reply_markup=get_main_keyboard())
+        
+        # --- BROWSER NAVIGATE (contextual: routes to browser agent) ---
+        elif action == "browser_navigate":
+            if status_msg: await status_msg.delete()
+            url = command_json.get("url", "")
+            
+            if not url:
+                await update.message.reply_text("❌ No URL specified.", reply_markup=get_main_keyboard())
+                return
+            
+            # Add domain suffix if needed
+            if not any(x in url for x in ['.com', '.in', '.org', '.net', '.io', 'http']):
+                url = url + ".com"
+            
+            # Route to browser agent with a navigate goal
+            goal = f"open {url}"
+            
+            loader = await update.message.reply_text(
+                f"🌐 Opening {url}...",
+                reply_markup=get_main_keyboard()
+            )
+            
+            from jarvix.agents.browser_agent import execute_goal
+            
+            loop = asyncio.get_running_loop()
+            result = await loop.run_in_executor(None, execute_goal, goal)
+            
+            await loader.delete()
+            
+            if result.success:
+                message = f"✅ Opened {url}"
+                if result.screenshots:
+                    last_screenshot = result.screenshots[-1]
+                    if os.path.exists(last_screenshot):
+                        await update.message.reply_photo(
+                            photo=open(last_screenshot, 'rb'),
+                            caption=message,
+                            reply_markup=get_main_keyboard()
+                        )
+                    else:
+                        await update.message.reply_text(message, reply_markup=get_main_keyboard())
+                else:
+                    await update.message.reply_text(message, reply_markup=get_main_keyboard())
+            else:
+                await update.message.reply_text(f"❌ Failed to open {url}", reply_markup=get_main_keyboard())
+        
+        # --- WEB SEARCH (contextual: use browser if active, else Google) ---
+        elif action == "web_search":
+            if status_msg: await status_msg.delete()
+            query = command_json.get("query", "")
+            
+            if not query:
+                await update.message.reply_text("❌ No search query specified.", reply_markup=get_main_keyboard())
+                return
+            
+            from jarvix.core.state_manager import is_browser_active
+            
+            if is_browser_active():
+                # Browser is open - search on current page context
+                loader = await update.message.reply_text(
+                    f"🔍 Searching: {query}...",
+                    reply_markup=get_main_keyboard()
+                )
+                
+                from jarvix.agents.browser_agent import execute_goal
+                goal = f"search {query}"
+                
+                loop = asyncio.get_running_loop()
+                result = await loop.run_in_executor(None, execute_goal, goal)
+                
+                await loader.delete()
+                
+                if result.success and result.screenshots:
+                    last_screenshot = result.screenshots[-1]
+                    if os.path.exists(last_screenshot):
+                        await update.message.reply_photo(
+                            photo=open(last_screenshot, 'rb'),
+                            caption=f"🔍 Search results for: {query}",
+                            reply_markup=get_main_keyboard()
+                        )
+                    else:
+                        await update.message.reply_text(f"✅ Searched for: {query}", reply_markup=get_main_keyboard())
+                else:
+                    await update.message.reply_text(f"✅ Searched for: {query}", reply_markup=get_main_keyboard())
+            else:
+                # No browser - use regular web search (Google)
+                loader = await update.message.reply_text(
+                    f"🔍 Searching Google: {query}...",
+                    reply_markup=get_main_keyboard()
+                )
+                
+                loop = asyncio.get_running_loop()
+                result = await loop.run_in_executor(None, execute_command, command_json)
+                
+                await loader.delete()
+                await update.message.reply_text(result, parse_mode='Markdown', reply_markup=get_main_keyboard())
         
         # --- BROWSER AGENT HANDLER ---
         elif action == "browser_agent":
@@ -977,6 +1076,7 @@ Quick Commands:
                 await update.message.reply_text("❌ No goal specified. Usage: `/agent open youtube and search pikachu`", 
                     parse_mode='Markdown', reply_markup=get_main_keyboard())
                 return
+
             
             # Send initial status
             loader = await update.message.reply_text(
