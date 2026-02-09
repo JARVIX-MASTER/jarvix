@@ -968,6 +968,125 @@ Quick Commands:
             execute_command(command_json)
             await update.message.reply_text("🛑 Browser closed.", reply_markup=get_main_keyboard())
         
+        # --- BROWSER AGENT HANDLER ---
+        elif action == "browser_agent":
+            if status_msg: await status_msg.delete()
+            goal = command_json.get("goal", "")
+            
+            if not goal:
+                await update.message.reply_text("❌ No goal specified. Usage: `/agent open youtube and search pikachu`", 
+                    parse_mode='Markdown', reply_markup=get_main_keyboard())
+                return
+            
+            # Send initial status
+            loader = await update.message.reply_text(
+                f"🤖 **Browser Agent Started**\n\n🎯 Goal: {goal}\n\n⏳ Planning actions...",
+                parse_mode='Markdown',
+                reply_markup=get_main_keyboard()
+            )
+            
+            # Execute goal in background
+            from jarvix.agents.browser_agent import execute_goal
+            
+            loop = asyncio.get_running_loop()
+            result = await loop.run_in_executor(None, execute_goal, goal)
+            
+            await loader.delete()
+            
+            if result.success:
+                # Build success message
+                message = f"✅ **Goal Completed!**\n\n🎯 {result.goal}\n\n"
+                message += f"📊 Steps: {result.steps_completed}/{result.steps_total}\n"
+                message += f"⏱️ Duration: {result.duration}\n"
+                
+                if result.extracted_data:
+                    data_lines = [f"• {k}: {v}" for k, v in result.extracted_data.items()]
+                    message += f"\n📋 Data:\n" + "\n".join(data_lines)
+                
+                # Send with screenshot if available
+                if result.screenshots:
+                    last_screenshot = result.screenshots[-1]
+                    if os.path.exists(last_screenshot):
+                        await update.message.reply_photo(
+                            photo=open(last_screenshot, 'rb'),
+                            caption=message[:1024],  # Telegram caption limit
+                            parse_mode='Markdown',
+                            reply_markup=get_main_keyboard()
+                        )
+                    else:
+                        await update.message.reply_text(message, parse_mode='Markdown', reply_markup=get_main_keyboard())
+                else:
+                    await update.message.reply_text(message, parse_mode='Markdown', reply_markup=get_main_keyboard())
+            else:
+                # Build error message
+                message = f"⚠️ **Goal Partially Completed**\n\n🎯 {result.goal}\n\n"
+                message += f"📊 Steps: {result.steps_completed}/{result.steps_total}\n"
+                
+                if result.errors:
+                    message += f"\n❌ Issue: {result.errors[-1][:200]}"
+                
+                # Still send screenshot if we have one
+                if result.screenshots:
+                    last_screenshot = result.screenshots[-1]
+                    if os.path.exists(last_screenshot):
+                        await update.message.reply_photo(
+                            photo=open(last_screenshot, 'rb'),
+                            caption=message[:1024],
+                            parse_mode='Markdown',
+                            reply_markup=get_main_keyboard()
+                        )
+                    else:
+                        await update.message.reply_text(message, parse_mode='Markdown', reply_markup=get_main_keyboard())
+                else:
+                    await update.message.reply_text(message, parse_mode='Markdown', reply_markup=get_main_keyboard())
+        
+        # --- BROWSER CONTINUATION COMMANDS (click, scroll, etc.) ---
+        elif action in ["browser_click", "browser_scroll", "browser_type", "browser_back", "browser_refresh"]:
+            if status_msg: await status_msg.delete()
+            
+            # Check if browser is active
+            from jarvix.core.state_manager import is_browser_active
+            if not is_browser_active():
+                await update.message.reply_text(
+                    "❌ No active browser session.\n\nUse `/agent <goal>` first to start a browser task.",
+                    parse_mode='Markdown',
+                    reply_markup=get_main_keyboard()
+                )
+                return
+            
+            loader = await update.message.reply_text(
+                f"🔗 Executing: {action.replace('browser_', '')}...",
+                reply_markup=get_main_keyboard()
+            )
+            
+            from jarvix.agents.browser_agent import execute_continuation
+            
+            loop = asyncio.get_running_loop()
+            result = await loop.run_in_executor(None, execute_continuation, action, command_json)
+            
+            await loader.delete()
+            
+            if result.success:
+                message = f"✅ Action Completed\n\n{result.message}"
+                
+                if result.screenshots:
+                    last_screenshot = result.screenshots[-1]
+                    if os.path.exists(last_screenshot):
+                        await update.message.reply_photo(
+                            photo=open(last_screenshot, 'rb'),
+                            caption=message[:1024],
+                            reply_markup=get_main_keyboard()
+                        )
+                    else:
+                        await update.message.reply_text(message, reply_markup=get_main_keyboard())
+                else:
+                    await update.message.reply_text(message, reply_markup=get_main_keyboard())
+            else:
+                await update.message.reply_text(
+                    f"❌ {result.message if result.message else 'Action failed'}",
+                    reply_markup=get_main_keyboard()
+                )
+        
         # --- USER PROFILE & FORM FILL HANDLERS ---
         elif action == "fill_form_auto":
             if status_msg: await status_msg.delete()

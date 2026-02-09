@@ -193,6 +193,37 @@ COMMAND_PATTERNS = {
         "triggers": ["focus status", "blacklist", "/blacklist"],
         "action": {"action": "focus_mode", "sub_action": "status"}
     },
+    
+    # --- BROWSER AGENT ---
+    "browser_agent": {
+        "triggers": ["/agent", "goal:", "agent:"],
+        "extract_pattern": r"(?:/agent\s+|goal:\s*|agent:\s*)(.+)",
+        "action_template": {"action": "browser_agent", "goal": "$1"}
+    },
+    
+    # --- CONTINUATION COMMANDS (use with active browser) ---
+    "browser_click": {
+        "triggers": ["click on", "click", "tap on", "tap", "press on", "press the", "select"],
+        "extract_pattern": r"(?:click on|click|tap on|tap|press on|press the|select)\s+(.+)",
+        "action_template": {"action": "browser_click", "target": "$1"}
+    },
+    "browser_scroll": {
+        "triggers": ["scroll down", "scroll up", "scroll"],
+        "action": {"action": "browser_scroll", "direction": "down"}
+    },
+    "browser_type": {
+        "triggers": ["type", "enter text", "write"],
+        "extract_pattern": r"(?:type|enter text|write)\s+(.+)",
+        "action_template": {"action": "browser_type", "text": "$1"}
+    },
+    "browser_back": {
+        "triggers": ["go back", "back", "previous page"],
+        "action": {"action": "browser_back"}
+    },
+    "browser_refresh": {
+        "triggers": ["refresh", "reload"],
+        "action": {"action": "browser_refresh"}
+    },
 }
 
 
@@ -237,6 +268,12 @@ class KeywordMatcher:
         
         text_normalized = self._normalize_text(text)
         text_expanded = self._expand_synonyms(text_normalized)
+        
+        # Priority check: /agent command should always go to browser_agent
+        if text_normalized.startswith("/agent ") or text_normalized.startswith("goal:") or text_normalized.startswith("agent:"):
+            config = self.patterns.get("browser_agent", {})
+            if config and "extract_pattern" in config:
+                return self._extract_and_build(text, text_normalized, config)
         
         # Try exact trigger match first (fastest)
         for trigger, cmd_names in self.trigger_index.items():
