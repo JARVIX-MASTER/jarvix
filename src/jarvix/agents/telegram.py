@@ -169,28 +169,39 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 1. Safe "Typing" Indicator (Won't crash if internet lags)
     await safe_send_action(context.bot, chat_id, constants.ChatAction.TYPING)
 
-    # Pre-process common commands
-    command_json = None
+    # Use command router for fast pattern matching (Tier 1)
+    from jarvix.core.command_router import route_command_with_tier
+    command_json, tier_used = route_command_with_tier(user_text)
     
-    if "/battery" in lower_text or "battery" in lower_text:
+    # Special-case handlers that need text parsing (override router for these)
+    text = user_text  # For compatibility with existing handlers
+    
+    # Handle save_profile specially (needs to parse key=value pairs)
+    if "/save_profile" in lower_text or "save my profile" in lower_text:
+        profile_data = {}
+        parts = text.split()
+        for part in parts:
+            if "=" in part:
+                key, value = part.split("=", 1)
+                profile_data[key.lower().strip()] = value.strip()
+        
+        if profile_data:
+            command_json = {"action": "save_profile", "data": profile_data}
+        else:
+            command_json = {"action": "profile_help"}
+    
+    
+    # Legacy pattern match for commands with complex extraction not in router
+    # Only runs if command_json is still None (router didn't match)
+    if command_json is None and "/battery" in lower_text:
         command_json = {"action": "check_battery"}
-    elif "/systemhealth" in lower_text or "system health" in lower_text:
+    elif command_json is None and ("/systemhealth" in lower_text or "system health" in lower_text):
         command_json = {"action": "check_health"}
-    elif ("/screenshot" in lower_text or "screenshot" in lower_text) and not ("tab" in lower_text or "browser" in lower_text):
+    elif command_json is None and (("/screenshot" in lower_text or "screenshot" in lower_text) and not ("tab" in lower_text or "browser" in lower_text)):
         command_json = {"action": "take_screenshot"}
-    elif "/sleep" in lower_text:
-        command_json = {"action": "system_sleep"}
-    elif "/shutdown" in lower_text or "shutdown" in lower_text:
-        command_json = {"action": "shutdown_pc"}
-    elif "/restart" in lower_text or "restart" in lower_text:
-        command_json = {"action": "restart_pc"}
-    elif "/panic" in lower_text or "🚨 panic" in lower_text:
-        command_json = {"action": "system_panic"}
-    elif "/camera_on" in lower_text:
-        command_json = {"action": "camera_stream", "value": "on"}
-    elif "/camera_off" in lower_text:
-        command_json = {"action": "camera_stream", "value": "off"}
-    elif "/recordaudio" in lower_text:
+    
+    # Special cases that need complex argument parsing (router can't handle these)
+    elif command_json is None and "/recordaudio" in lower_text:
         parts = lower_text.split()
         if len(parts) > 1:
             arg = parts[1]
@@ -219,31 +230,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=get_main_keyboard()
             )
             return
-            
-    elif "/location" in lower_text or any(x in lower_text for x in ["my location", "where am i", "laptop location", "where is my laptop", "find location"]):
-        command_json = {"action": "get_location"}
-    # --- EXISTING BUTTON TRIGGERS ---
-    elif "/clear_bin" in lower_text or "clear bin" in lower_text:
-        command_json = {"action": "clear_recycle_bin"}
-    elif "/storage" in lower_text or "check storage" in lower_text:
-        command_json = {"action": "check_storage"}
-    elif "/activities" in lower_text or "activities" in lower_text:
-        command_json = {"action": "get_activities"}
-    # --- NEW CLIPBOARD TRIGGER ---
-    elif "/copied_texts" in lower_text or any(x in lower_text for x in ["copied texts", "clipboard history", "what did i copy", "show copied"]):
-        command_json = {"action": "get_clipboard_history"}
-
-    # --- FEATURE #11: FOCUS MODE COMMANDS ---
-    elif "/focus_mode_on" in lower_text or "focus on" in lower_text:
-        command_json = {"action": "focus_mode", "sub_action": "on"}
-    elif "/focus_mode_off" in lower_text or "focus off" in lower_text:
-        command_json = {"action": "focus_mode", "sub_action": "off"}
-    elif "/blacklist" in lower_text:
-        # Check for arguments: /blacklist add steam discord
+    
+    # Blacklist with complex argument parsing
+    elif command_json is None and "/blacklist" in lower_text:
         parts = lower_text.split()
         if len(parts) >= 3:
             sub_action = parts[1]
-            items = parts[2:] # Capture all remaining parts
+            items = parts[2:]
             if sub_action == "add":
                 command_json = {"action": "focus_mode", "sub_action": "add", "items": items}
             elif sub_action == "remove":
@@ -252,68 +245,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 command_json = {"action": "focus_mode", "sub_action": "status"}
         else:
             command_json = {"action": "focus_mode", "sub_action": "status"}
-
-    # --- GMAIL AUTOMATION COMMANDS ---
-    elif "/emails" in lower_text or any(x in lower_text for x in ["check emails", "show inbox", "read emails", "email summary", "my mails", "check mail"]):
-        command_json = {"action": "get_emails"}
-    elif "/upcoming" in lower_text or "/interviews" in lower_text or any(x in lower_text for x in ["upcoming interviews", "interview schedule", "when is my interview", "my interviews"]):
-        command_json = {"action": "get_upcoming_interviews"}
-    elif "/unsubscribe" in lower_text or "/promotional" in lower_text or any(x in lower_text for x in ["promotional emails", "spam", "unsubscribe", "cancel subscriptions", "marketing emails"]):
-        command_json = {"action": "get_promotional"}
-
-    # --- WEB AUTOMATION COMMANDS ---
-    elif "/search" in lower_text or any(x in lower_text for x in ["search for", "google", "look up", "find online", "web search"]):
-        # Extract search query - remove trigger words
-        query = lower_text
-        for trigger in ["/search", "search for", "google", "look up", "find online", "web search"]:
-            query = query.replace(trigger, "").strip()
-        command_json = {"action": "web_search", "query": query if query else "latest news"}
-    
-    elif "/browse" in lower_text or any(x in lower_text for x in ["go to website", "open url", "navigate to site", "visit site"]):
-        # Extract URL
-        import re
-        url_match = re.search(r'(https?://\S+|www\.\S+|\S+\.(com|org|net|io|in|co))', lower_text)
-        url = url_match.group(0) if url_match else ""
-        command_json = {"action": "browse_url", "url": url}
-    
-    elif "/addcart" in lower_text or "/add_cart" in lower_text or any(x in lower_text for x in ["add to cart", "add to amazon", "buy from amazon", "order from amazon"]):
-        # Extract product name
-        product = lower_text
-        for trigger in ["/addcart", "/add_cart", "add to cart", "add to amazon cart", "buy from amazon", "order from amazon", "add to amazon"]:
-            product = product.replace(trigger, "").strip()
-        command_json = {"action": "add_to_cart", "product": product if product else ""}
-    
-    elif "/browser_screenshot" in lower_text or any(x in lower_text for x in ["show browser", "browser screenshot", "what's on the page"]):
-        command_json = {"action": "browser_screenshot"}
-    
-    elif "/stop_browser" in lower_text or "close browser" in lower_text:
-        command_json = {"action": "stop_browser"}
-    
-    # --- USER PROFILE & FORM FILL COMMANDS ---
-    elif "/fill_form" in lower_text or any(x in lower_text for x in ["fill form", "fill this form", "autofill", "auto fill"]):
-        command_json = {"action": "fill_form_auto"}
-    
-    elif "/my_profile" in lower_text or "/profile" in lower_text or "show my profile" in lower_text:
-        command_json = {"action": "get_profile"}
-    
-    elif "/clear_profile" in lower_text:
-        command_json = {"action": "clear_profile"}
-    
-    elif "/save_profile" in lower_text or "save my profile" in lower_text:
-        # Parse profile data from message
-        # Format: /save_profile name=John email=john@email.com phone=123456
-        profile_data = {}
-        parts = text.split()
-        for part in parts:
-            if "=" in part:
-                key, value = part.split("=", 1)
-                profile_data[key.lower().strip()] = value.strip()
-        
-        if profile_data:
-            command_json = {"action": "save_profile", "data": profile_data}
-        else:
-            # No data provided, show help
-            command_json = {"action": "profile_help"}
 
     # Show processing message (with error handling)
     status_msg = None
