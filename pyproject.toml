@@ -1,0 +1,50 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "jarvix-assistant"
+version = "1.1.0"
+description = "Your Intelligent Desktop Companion - 100% Local, 100% Private"
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT"
+authors = [
+    { name = "JARVIX AGENTS"},
+]
+keywords = ["assistant", "ai", "automation", "local", "privacy", "ollama"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Operating System :: Microsoft :: Windows",
+]
+dependencies = [
+    "SpeechRecognition",
+    "pyttsx3",
+    "pyaudio",  # Optional but good to keep for legacy online mode
+    "pillow",
+    "textblob",
+    "requests",
+    "python-telegram-bot",
+    "psutil",
+    "pywin32",
+    "pyautogui",
+    "opencv-python",
+    "wmi",
+    "comtypes",
+    "ollama",
+    "vosk",
+    "sounddevice",
+    "python-dotenv",
+    "screen-brightness-control",
+    "scipy",
+]
+
+[project.scripts]
+jarvix = "jarvix.main:main"
+jarvix-linux = "jarvix_linux.main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/jarvix"]

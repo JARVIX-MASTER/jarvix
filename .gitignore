@@ -1,0 +1,46 @@
+# Secrets (User tokens)
+.env
+
+# Python junk
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Generated Native Host Files (Machine Specific)
+src/jarvix/core/jarvix_native_host.json
+jarvix_host.bat
+
+# Virtual Environment
+venv/
+env/
+.venv/
+
+# User Data (Don't upload your memory or photos)
+blacklist.json
+long_term_memory.json
+clipboard_history.json
+file_activity_log.json
+audio_recording.wav
+*.jpg
+*.png
+
+# IDE/Editor
+.vscode/
+.idea/
+*.code-workspace
+
+# OS files
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# Logs
+*.log
+
+# Temp files
+*.tmp
+*.temp

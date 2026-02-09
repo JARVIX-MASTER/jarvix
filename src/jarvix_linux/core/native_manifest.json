@@ -1,0 +1,7 @@
+{
+  "name": "jarvix.native.host",
+  "description": "Jarvix Assistant Native Messaging Host",
+  "path": "JARVIX_HOST_PATH",
+  "type": "stdio",
+  "allowed_extensions": ["jarvix@assistant.local"]
+}

@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "Jarvix Activity Monitor (Firefox)",
+  "version": "1.0.0",
+  "description": "Monitors browser tabs for Jarvix Desktop Assistant",
+  "permissions": ["tabs", "nativeMessaging", "scripting"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "jarvix@assistant.local",
+      "strict_min_version": "109.0"
+    }
+  },
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}
