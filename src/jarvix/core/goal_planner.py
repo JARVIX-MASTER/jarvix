@@ -31,7 +31,7 @@ class ActionPlan:
     estimated_time: int = 0
 
 
-# Site-specific search selectors
+# Site-specific search selectors and shopping profiles
 SITE_SEARCH_CONFIG = {
     "youtube.com": {
         "search_selector": "input#search, input[name='search_query']",
@@ -41,12 +41,22 @@ SITE_SEARCH_CONFIG = {
     "amazon.in": {
         "search_selector": "#twotabsearchtextbox",
         "submit_selector": "#nav-search-submit-button",
-        "results_selector": "[data-component-type='s-search-result']"
+        "results_selector": "[data-component-type='s-search-result']",
+        # Shopping helpers
+        "product_link_selector": "[data-component-type='s-search-result'] h2 a, .s-result-item h2 a",
+        "product_price_selector": ".a-price .a-offscreen, .a-price-whole, #priceblock_ourprice, #priceblock_dealprice",
+        "product_title_selector": "#productTitle, .product-title",
+        "product_rating_selector": ".a-icon-alt"
     },
     "amazon.com": {
         "search_selector": "#twotabsearchtextbox",
         "submit_selector": "#nav-search-submit-button",
-        "results_selector": "[data-component-type='s-search-result']"
+        "results_selector": "[data-component-type='s-search-result']",
+        # Shopping helpers
+        "product_link_selector": "[data-component-type='s-search-result'] h2 a, .s-result-item h2 a",
+        "product_price_selector": ".a-price .a-offscreen, .a-price-whole, #priceblock_ourprice, #priceblock_dealprice",
+        "product_title_selector": "#productTitle, .product-title",
+        "product_rating_selector": ".a-icon-alt"
     },
     "google.com": {
         "search_selector": "textarea[name='q'], input[name='q']",
@@ -56,13 +66,41 @@ SITE_SEARCH_CONFIG = {
     "flipkart.com": {
         "search_selector": "input[name='q'], input._3704LK",
         "submit_selector": "button[type='submit'], button._2iLD__",
-        "results_selector": "div._1AtVbE, div._4ddWXP"
+        "results_selector": "div._1AtVbE, div._4ddWXP",
+        # Shopping helpers
+        "product_link_selector": "div._1AtVbE a, div._4ddWXP a",
+        "product_price_selector": "div._30jeq3",
+        "product_title_selector": "span.B_NuCI",
+        "product_rating_selector": "div._3LWZlK"
     },
     "github.com": {
         "search_selector": "input[name='q']",
         "submit_selector": None,
         "results_selector": ".repo-list-item, .Box-row"
+    },
+    "ebay.com": {
+        "search_selector": "input[aria-label*='Search' i], input[type='text'][name='_nkw']",
+        "submit_selector": "input[type='submit'][value*='Search' i], button[aria-label*='Search' i]",
+        "results_selector": "li.s-item",
+        # Shopping helpers
+        "product_link_selector": "li.s-item a.s-item__link",
+        "product_price_selector": ".s-item__price",
+        "product_title_selector": "#itemTitle, .s-item__title",
+        "product_rating_selector": ".b-starrating__star, .x-star-rating span.clipped"
     }
+}
+
+
+# Common site aliases for pattern matching and multi-site flows
+SITE_ALIASES = {
+    "youtube": "youtube.com",
+    "amazon": "amazon.in",
+    "amazon india": "amazon.in",
+    "amazon us": "amazon.com",
+    "flipkart": "flipkart.com",
+    "google": "google.com",
+    "github": "github.com",
+    "ebay": "ebay.com",
 }
 
 
@@ -121,16 +159,8 @@ class GoalPlanner:
     
     def _pattern_plan(self, goal_lower: str, original_goal: str) -> Optional[ActionPlan]:
         """Pattern-based planning for common goals."""
-        
-        # Map short names to full domains
-        site_aliases = {
-            "youtube": "youtube.com",
-            "amazon": "amazon.in",
-            "flipkart": "flipkart.com",
-            "google": "google.com",
-            "github": "github.com",
-            "ebay": "ebay.com",
-        }
+        # Use shared site aliases
+        site_aliases = SITE_ALIASES
         
         # Pattern: "open youtube and search pikachu" (short site name)
         short_match = re.search(
@@ -181,6 +211,33 @@ class GoalPlanner:
             product = price_match.group(1).strip()
             site = price_match.group(2) + (".in" if "amazon" in price_match.group(2) else ".com")
             return self._create_price_check_plan(site, product)
+        
+        # Pattern: "compare prices for X across amazon, flipkart and ebay"
+        multi_compare_match = re.search(
+            r'compare\s+prices?\s+(?:for|of)\s+(.+?)(?:\s+(?:across|on|between)\s+(.+))?$',
+            goal_lower
+        )
+        if multi_compare_match:
+            product = multi_compare_match.group(1).strip()
+            sites_raw = (multi_compare_match.group(2) or "").strip()
+            
+            sites: List[str] = []
+            if sites_raw:
+                # Normalize separators: "amazon, flipkart and ebay" -> "amazon, flipkart, ebay"
+                sites_clean = sites_raw.replace(" and ", ",")
+                for part in sites_clean.split(","):
+                    name = part.strip()
+                    if not name:
+                        continue
+                    # Map via aliases, or keep as-is
+                    mapped = SITE_ALIASES.get(name, SITE_ALIASES.get(name.replace(".com", ""), name))
+                    sites.append(mapped)
+            
+            # Default sites if none explicitly mentioned
+            if not sites:
+                sites = ["amazon.in", "flipkart.com", "ebay.com"]
+            
+            return self._create_multi_site_compare_plan(product, sites)
         
         # Pattern: Simple "open youtube" or "open amazon.com"
         simple_open_match = re.search(
@@ -306,33 +363,76 @@ class GoalPlanner:
             context={"site": domain, "query": query}
         )
     
-    def _create_price_check_plan(self, site: str, product: str) -> ActionPlan:
-        """Create a plan to find product price."""
+    def _create_price_check_plan(self, site: str, product: str, prefix: str = "") -> ActionPlan:
+        """Create a plan to find product price on a shopping site.
+        
+        The optional `prefix` is used for multi-site comparisons so that fields
+        like price/product_name don't overwrite each other in extracted_data.
+        """
         plan = self._create_site_search_plan(site, product)
         
-        # Add steps to extract price
+        # Resolve domain & config
+        domain = (
+            site.replace("https://", "")
+            .replace("http://", "")
+            .replace("www.", "")
+            .split("/")[0]
+        )
+        config = self.site_config.get(domain, {})
+        
+        product_link_selector = config.get(
+            "product_link_selector",
+            "[data-component-type='s-search-result'] h2 a, .s-result-item h2 a",
+        )
+        price_selector = config.get(
+            "product_price_selector",
+            ".a-price .a-offscreen, .a-price-whole, #priceblock_ourprice, #priceblock_dealprice",
+        )
+        title_selector = config.get(
+            "product_title_selector",
+            "#productTitle, .product-title",
+        )
+        rating_selector = config.get(
+            "product_rating_selector",
+            ".a-icon-alt, ._3LWZlK, .x-star-rating span.clipped",
+        )
+
+        price_key = f"{prefix}price" if prefix else "price"
+        name_key = f"{prefix}product_name" if prefix else "product_name"
+        rating_key = f"{prefix}rating" if prefix else "rating"
+        
+        # Add steps to open first product from search results
         plan.steps.append(ActionStep(
             action="click",
-            params={"selector": "[data-component-type='s-search-result'] h2 a, .s-result-item h2 a"},
+            params={"selector": product_link_selector},
             description="Click first product"
         ))
         
         plan.steps.append(ActionStep(
             action="wait_for",
-            params={"selector": ".a-price-whole, #priceblock_ourprice", "timeout": 10000},
+            params={"selector": price_selector, "timeout": 10000},
             description="Wait for product page"
         ))
         
+        # Extract price
         plan.steps.append(ActionStep(
             action="extract",
-            params={"selector": ".a-price-whole", "attribute": "text", "save_as": "price"},
+            params={"selector": price_selector, "attribute": "text", "save_as": price_key},
             description="Extract price"
         ))
         
+        # Extract product name
         plan.steps.append(ActionStep(
             action="extract",
-            params={"selector": "#productTitle, .product-title", "attribute": "text", "save_as": "product_name"},
+            params={"selector": title_selector, "attribute": "text", "save_as": name_key},
             description="Extract product name"
+        ))
+        
+        # Extract rating if available
+        plan.steps.append(ActionStep(
+            action="extract",
+            params={"selector": rating_selector, "attribute": "text", "save_as": rating_key},
+            description="Extract rating (if available)"
         ))
         
         plan.steps.append(ActionStep(
@@ -341,8 +441,59 @@ class GoalPlanner:
             description="Capture product page"
         ))
         
-        plan.goal = f"Find price of '{product}'"
+        plan.goal = f"Find price of '{product}' on {domain}"
         return plan
+
+    def _create_multi_site_compare_plan(self, product: str, sites: List[str]) -> ActionPlan:
+        """Create a plan to compare prices for a product across multiple sites."""
+        normalized_sites: List[str] = []
+        
+        for raw in sites:
+            if not raw:
+                continue
+            name = raw.strip().lower()
+            if not name:
+                continue
+            
+            # Map via aliases first
+            mapped = SITE_ALIASES.get(name) or SITE_ALIASES.get(name.replace(".com", ""), name)
+            domain = (
+                mapped.replace("https://", "")
+                .replace("http://", "")
+                .replace("www.", "")
+                .split("/")[0]
+            )
+            
+            # Ensure we keep only domain (no path)
+            if not any(tld in domain for tld in [".com", ".in", ".org", ".net", ".io"]):
+                # Best-effort default TLD
+                domain = domain + ".com"
+            
+            if domain not in normalized_sites:
+                normalized_sites.append(domain)
+        
+        if not normalized_sites:
+            normalized_sites = ["amazon.in", "flipkart.com", "ebay.com"]
+        
+        all_steps: List[ActionStep] = []
+        context_sites: List[str] = []
+        
+        for domain in normalized_sites:
+            url = "https://www." + domain
+            prefix = domain.split(".")[0] + "_"
+            sub_plan = self._create_price_check_plan(url, product, prefix=prefix)
+            all_steps.extend(sub_plan.steps)
+            context_sites.append(domain)
+        
+        return ActionPlan(
+            goal=f"Compare prices for '{product}' across {', '.join(context_sites)}",
+            steps=all_steps,
+            context={
+                "type": "multi_site_compare",
+                "product": product,
+                "sites": context_sites,
+            }
+        )
     
     def _llm_plan(self, goal: str) -> ActionPlan:
         """Use LLM to create plan for complex goals."""

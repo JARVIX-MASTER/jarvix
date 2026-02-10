@@ -12,7 +12,7 @@ from typing import Dict, List, Optional, Any, Tuple
 
 SYNONYMS = {
     # System actions
-    "screenshot": ["ss", "snap", "capture screen", "screen capture", "screen shot", "take screenshot", "grab screen"],
+    "screenshot": ["snap", "capture screen", "screen capture", "screen shot", "take screenshot", "grab screen"],
     "battery": ["power level", "charge", "battery level", "battery status", "how much battery", "battery percentage"],
     "shutdown": ["turn off", "power off", "shut down", "switch off", "turn off pc", "turn off computer"],
     "restart": ["reboot", "restart pc", "restart computer", "reboot pc"],
@@ -128,6 +128,12 @@ COMMAND_PATTERNS = {
         "extract_pattern": r"(?:search\s+(?:for\s+)?|google\s+|look\s+up\s+|find\s+online\s+|/search\s+)(.+)",
         "action_template": {"action": "web_search", "query": "$1"}
     },
+    # Multi-site shopping / browser agent goals
+    "browser_compare": {
+        "triggers": ["compare prices", "compare price", "price comparison"],
+        "extract_pattern": r"(compare.+)",
+        "action_template": {"action": "browser_agent", "goal": "$1"}
+    },
     # Multi-step browser goals (open X and search Y)
     "browser_goal": {
         "triggers": ["open", "go to", "visit", "browse", "/browse"],
@@ -237,6 +243,17 @@ COMMAND_PATTERNS = {
         "triggers": ["refresh", "reload"],
         "action": {"action": "browser_refresh"}
     },
+    # Sort / filter continuation commands on shopping sites
+    "browser_sort": {
+        "triggers": ["sort by"],
+        "extract_pattern": r"(?:sort\s+by\s+)(.+)",
+        "action_template": {"action": "browser_sort", "sort_by": "$1"}
+    },
+    "browser_filter_price": {
+        "triggers": ["filter by price", "price under", "price below", "under", "below"],
+        "extract_pattern": r"(?:filter\s+by\s+price\s+|price\s+under\s+|price\s+below\s+|under\s+|below\s+)(.+)",
+        "action_template": {"action": "browser_filter_price", "max_price": "$1"}
+    },
 }
 
 
@@ -267,9 +284,41 @@ class KeywordMatcher:
         text_lower = text.lower()
         for standard, variations in self.synonyms.items():
             for variation in variations:
-                if variation in text_lower:
-                    text_lower = text_lower.replace(variation, standard)
+                v = variation.lower()
+                if not v:
+                    continue
+                # Very short variations (like "ss") should only match whole words
+                if len(v) <= 2 and v.isalnum():
+                    text_lower = re.sub(rf"\b{re.escape(v)}\b", standard, text_lower)
+                else:
+                    if v in text_lower:
+                        text_lower = text_lower.replace(v, standard)
         return text_lower
+
+    def _trigger_matches(self, text_expanded: str, trigger: str) -> bool:
+        """Return True if a trigger matches safely.
+        
+        Important: avoid short-trigger substring collisions like:
+        - trigger "ss" matching "across"
+        """
+        t = trigger.lower().strip()
+        if not t:
+            return False
+
+        # Slash commands should match at start
+        if t.startswith("/"):
+            return text_expanded.startswith(t)
+
+        # Multi-word triggers can be substring matched
+        if " " in t:
+            return t in text_expanded
+
+        # Very short triggers are matched as whole words only
+        if len(t) <= 2 and t.isalnum():
+            return re.search(rf"\b{re.escape(t)}\b", text_expanded) is not None
+
+        # Default: substring match or startswith
+        return t in text_expanded or text_expanded.startswith(t)
     
     def match(self, text: str) -> Optional[Dict[str, Any]]:
         """
@@ -281,6 +330,13 @@ class KeywordMatcher:
         
         text_normalized = self._normalize_text(text)
         text_expanded = self._expand_synonyms(text_normalized)
+
+        # Priority: explicit /browse commands should always go to browser agent,
+        # not system-level actions like screenshot.
+        if text_normalized.startswith("/browse "):
+            goal = text.strip()[len("/browse "):].strip()
+            if goal:
+                return {"action": "browser_agent", "goal": goal}
         
         # Priority check: Multi-step browser commands (open/browse X and search Y)
         multi_step_hints = ["and search", "and find", "then search", "then find", "and click", "and select", "and add"]
@@ -296,7 +352,7 @@ class KeywordMatcher:
         
         # Try exact trigger match first (fastest)
         for trigger, cmd_names in self.trigger_index.items():
-            if trigger in text_expanded or text_expanded.startswith(trigger):
+            if self._trigger_matches(text_expanded, trigger):
                 cmd_name = cmd_names[0]  # Take first match
                 config = self.patterns[cmd_name]
                 

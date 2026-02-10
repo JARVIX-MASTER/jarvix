@@ -127,14 +127,21 @@ class ActionExecutor:
         """Click an element."""
         selector = params.get("selector", "")
         text = params.get("text", "")
+        index = params.get("index")
         
         try:
             if text:
                 # Click by visible text
-                locator = self.web_automation.page.get_by_text(text, exact=False).first
+                base_locator = self.web_automation.page.get_by_text(text, exact=False)
             else:
                 # Click by selector
-                locator = self.web_automation.page.locator(selector).first
+                base_locator = self.web_automation.page.locator(selector)
+            
+            # Support clicking nth match when index is provided
+            if isinstance(index, int) and index >= 0:
+                locator = base_locator.nth(index)
+            else:
+                locator = base_locator.first
             
             locator.click(timeout=10000)
             return ActionResult(success=True)
@@ -239,6 +246,25 @@ class ActionExecutor:
             )
         except Exception as e:
             return ActionResult(error=f"Screenshot failed: {e}")
+    
+    def _switch_tab(self, params: Dict) -> ActionResult:
+        """Switch to another browser tab by index."""
+        index = params.get("index", 0)
+        try:
+            index_int = int(index)
+        except Exception:
+            return ActionResult(error="Invalid tab index")
+        
+        try:
+            success = self.web_automation.switch_to_tab(index_int)
+            if not success:
+                return ActionResult(error="Tab not found or browser not available")
+            return ActionResult(
+                success=True,
+                data={"tab_index": index_int, "url": self.get_current_url()}
+            )
+        except Exception as e:
+            return ActionResult(error=f"Switch tab failed: {e}")
     
     def _read_dom(self, params: Dict) -> ActionResult:
         """Read DOM content."""

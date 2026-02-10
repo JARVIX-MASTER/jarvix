@@ -66,6 +66,34 @@ class WebAutomation:
             self.is_running = False
             return False
     
+    def switch_to_tab(self, index: int) -> bool:
+        """Switch to an existing browser tab (by index)."""
+        if not self.context:
+            return False
+        
+        try:
+            pages = self.context.pages
+            if not pages:
+                return False
+            
+            # Clamp index into range
+            if index < 0:
+                index = 0
+            if index >= len(pages):
+                return False
+            
+            self.page = pages[index]
+            try:
+                # Bring the tab to front for visibility
+                self.page.bring_to_front()
+            except Exception:
+                # Not critical if bring_to_front fails
+                pass
+            return True
+        except Exception as e:
+            print(f"⚠️ Failed to switch tab: {e}")
+            return False
+    
     def stop_browser(self) -> None:
         """Close browser and cleanup resources."""
         try:
