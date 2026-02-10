@@ -22,7 +22,7 @@ git clone https://github.com/your-repo/jarvix-assistant.git
 cd jarvix-assistant
 
 # Run the installer
-install.bat
+./install.bat
 ```
 
 **The installer automatically:**

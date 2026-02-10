@@ -49,7 +49,7 @@ JARVIX is an **AI-powered desktop assistant** that runs entirely on your local m
 ```bash
 git clone https://github.com/your-repo/jarvix-assistant.git
 cd jarvix-assistant
-install.bat
+./install.bat
 ```
 
 **That's it.** The installer handles Python, Ollama, dependencies, and AI model (~4.7GB).
@@ -61,6 +61,9 @@ Create `.env` in project root:
 ```env
 TELEGRAM_TOKEN=your_bot_token
 ALLOWED_TELEGRAM_USERNAME=your_username
+GMAIL_ADDRESS=your_gmail_address_here
+GMAIL_APP_PASSWORD=your_gmail_app_password_here
+# You can generate an app password for your Gmail account here: https://myaccount.google.com/apppasswords
 ```
 
 ### Launch
