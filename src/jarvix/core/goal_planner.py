@@ -25,6 +25,9 @@ class ActionPlan:
     goal: str
     steps: List[ActionStep] = field(default_factory=list)
     context: Dict[str, Any] = field(default_factory=dict)
+    # Optional rough estimate of how many seconds this plan will take.
+    # Not all plans need to set this explicitly.
+    estimated_time: int = 0
 
 
 # Site-specific search selectors
@@ -130,7 +133,7 @@ class GoalPlanner:
         
         # Pattern: "open youtube and search pikachu" (short site name)
         short_match = re.search(
-            r'(?:open|go to|visit)\s+(youtube|amazon|flipkart|google|github|ebay)\s+(?:and|then)\s+(?:search|find|look for)\s+(.+)',
+            r'(?:open|go to|visit|browse)\s+(youtube|amazon|flipkart|google|github|ebay)\s+(?:and|then)\s+(?:search|find|look for)\s+(.+)',
             goal_lower
         )
         if short_match:
@@ -140,7 +143,7 @@ class GoalPlanner:
         
         # Pattern: "open X.com and search Y" (full domain)
         compound_match = re.search(
-            r'(?:open|go to|visit)\s+(\S+\.(?:com|in|org|net|io))\s+(?:and|then)\s+(?:search|find|look for)\s+(.+)',
+            r'(?:open|go to|visit|browse)\s+(\S+\.(?:com|in|org|net|io))\s+(?:and|then)\s+(?:search|find|look for)\s+(.+)',
             goal_lower
         )
         if compound_match:

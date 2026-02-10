@@ -959,39 +959,6 @@ Quick Commands:
                 await update.message.reply_text(message_text, reply_markup=get_main_keyboard())
         # ----------------------------------------
 
-        # --- WEB AUTOMATION HANDLERS ---
-        elif action == "web_search":
-            if status_msg: await status_msg.delete()
-            query = command_json.get("query", "")
-            loader = await update.message.reply_text(f"🔍 Searching for: {query}...", reply_markup=get_main_keyboard())
-            
-            loop = asyncio.get_running_loop()
-            result = await loop.run_in_executor(None, execute_command, command_json)
-            
-            if result and "error" not in result:
-                results = result.get("results", [])
-                screenshot_path = result.get("screenshot")
-                
-                message_text = f"🔍 SEARCH RESULTS: {query}\n\n"
-                for i, r in enumerate(results[:5], 1):
-                    title = escape_markdown(r.get('title', 'No title')[:50])
-                    snippet = escape_markdown(r.get('snippet', '')[:80])
-                    message_text += f"*{i}. {title}*\n{snippet}\n\n"
-                
-                await loader.delete()
-                
-                if screenshot_path and os.path.exists(screenshot_path):
-                    await update.message.reply_photo(
-                        photo=open(screenshot_path, 'rb'),
-                        caption=message_text[:1000],
-                        parse_mode='Markdown',
-                        reply_markup=get_main_keyboard()
-                    )
-                else:
-                    await update.message.reply_text(message_text, parse_mode='Markdown', reply_markup=get_main_keyboard())
-            else:
-                await loader.edit_text(f"❌ Search failed: {result.get('error', 'Unknown error')}", reply_markup=get_main_keyboard())
-        
         elif action == "browse_url":
             if status_msg: await status_msg.delete()
             url = command_json.get("url", "")

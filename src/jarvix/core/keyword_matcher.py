@@ -130,9 +130,9 @@ COMMAND_PATTERNS = {
     },
     # Multi-step browser goals (open X and search Y)
     "browser_goal": {
-        "triggers": ["open", "go to", "visit"],
+        "triggers": ["open", "go to", "visit", "browse", "/browse"],
         "multi_step_hints": ["and search", "and find", "then search", "then find", "and click", "and select"],
-        "extract_pattern": r"((?:open|go\s+to|visit)\s+.+(?:and|then)\s+.+)",
+        "extract_pattern": r"((?:open|go\s+to|visit|browse|/browse)\s+.+(?:and|then)\s+.+)",
         "action_template": {"action": "browser_agent", "goal": "$1"}
     },
     "browser_navigate": {
@@ -214,12 +214,6 @@ COMMAND_PATTERNS = {
     },
     
     # --- BROWSER AGENT ---
-    "browser_agent": {
-        "triggers": ["/agent", "goal:", "agent:"],
-        "extract_pattern": r"(?:/agent\s+|goal:\s*|agent:\s*)(.+)",
-        "action_template": {"action": "browser_agent", "goal": "$1"}
-    },
-    
     # --- CONTINUATION COMMANDS (use with active browser) ---
     "browser_click": {
         "triggers": ["click on", "click", "tap on", "tap", "press on", "press the", "select"],
@@ -288,18 +282,17 @@ class KeywordMatcher:
         text_normalized = self._normalize_text(text)
         text_expanded = self._expand_synonyms(text_normalized)
         
-        # Priority check: /agent command should always go to browser_agent
-        if text_normalized.startswith("/agent ") or text_normalized.startswith("goal:") or text_normalized.startswith("agent:"):
-            config = self.patterns.get("browser_agent", {})
-            if config and "extract_pattern" in config:
-                return self._extract_and_build(text, text_normalized, config)
-        
-        # Priority check: Multi-step browser commands (open X and search Y)
+        # Priority check: Multi-step browser commands (open/browse X and search Y)
         multi_step_hints = ["and search", "and find", "then search", "then find", "and click", "and select", "and add"]
         if any(hint in text_normalized for hint in multi_step_hints):
             config = self.patterns.get("browser_goal", {})
             if config and "extract_pattern" in config:
-                return self._extract_and_build(text, text_normalized, config)
+                result = self._extract_and_build(text, text_normalized, config)
+                # If we successfully built a browser_goal command, return it.
+                # Otherwise, fall through to normal trigger matching so that
+                # commands like "/browse amazon.in and search X" still work.
+                if result:
+                    return result
         
         # Try exact trigger match first (fastest)
         for trigger, cmd_names in self.trigger_index.items():
