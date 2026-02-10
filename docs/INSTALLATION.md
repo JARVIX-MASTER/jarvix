@@ -19,7 +19,7 @@ The fastest way to get started:
 ```bash
 # Clone the repository
 git clone https://github.com/JARVIX-MASTER/jarvix
-cd jarvix-assistant
+cd jarvix
 
 # Run the installer
 ./install.bat
@@ -51,7 +51,7 @@ winget install Ollama.Ollama
 
 ```bash
 git clone https://github.com/JARVIX-MASTER/jarvix
-cd jarvix-assistant
+cd jarvix
 
 # Create virtual environment
 python -m venv venv

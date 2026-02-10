@@ -48,7 +48,7 @@ JARVIX is an **AI-powered desktop assistant** that runs entirely on your local m
 
 ```bash
 git clone https://github.com/JARVIX-MASTER/jarvix
-cd jarvix-assistant
+cd jarvix
 ./install.bat
 ```
 
@@ -70,8 +70,8 @@ GMAIL_APP_PASSWORD=your_gmail_app_password_here
 ### Launch
 
 ```bash
-start_jarvix.bat        # Visible mode
-run_silent.vbs          # Stealth mode (background)
+./start_jarvix.bat        # Visible mode
+./run_silent.vbs          # Stealth mode (background)
 ```
 
 📖 **[Full Installation Guide →](docs/INSTALLATION.md)**
@@ -229,7 +229,7 @@ Contributions are welcome! See [CONTRIBUTING.md](docs/CONTRIBUTING.md) for guide
 ```bash
 # Development setup
 git clone https://github.com/JARVIX-MASTER/jarvix
-cd jarvix-assistant
+cd jarvix
 git checkout -b feature/your-feature
 pip install -e .
 ```
