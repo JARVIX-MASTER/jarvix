@@ -268,7 +268,11 @@ def execute_continuation(action: str, params: Dict[str, Any]) -> AgentResult:
     Execute a single continuation action on the current browser page.
     Used for commands like "click on X" after a goal has been executed.
     """
-    from jarvix.core.state_manager import is_browser_active, update_browser_context
+    from jarvix.core.state_manager import (
+        is_browser_active,
+        update_browser_context,
+        get_browser_context,
+    )
     from jarvix.core.action_executor import action_executor
     
     print(f"\n🔗 Continuation: {action} {params}")
@@ -291,12 +295,35 @@ def execute_continuation(action: str, params: Dict[str, Any]) -> AgentResult:
     
     executor_action = action_map.get(action, action)
     
-    # Handle click by text
+    # Handle click, including smart handling for common phrases like "first result"
     if action == "browser_click":
-        target = params.get("target", "")
-        # Click by visible text
-        params = {"text": target}
-        executor_action = "click"
+        target_raw = params.get("target", "")
+        target = str(target_raw).strip().lower()
+
+        # Smart handling for generic phrases that refer to the first search result
+        if target in {"first result", "first product", "second result", "second product", "top result", "top product"}:
+            ctx = get_browser_context()
+            domain = (ctx.current_domain or "").lower()
+
+            selector = ""
+            if "amazon" in domain:
+                # First Amazon search result title link
+                selector = "[data-component-type='s-search-result'] h2 a, .s-result-item h2 a"
+            elif "flipkart" in domain:
+                # First Flipkart search result card/link
+                selector = "div._1AtVbE a, div._4ddWXP a"
+
+            if selector:
+                params = {"selector": selector}
+                executor_action = "click"
+            else:
+                # Fallback to visible-text click if we don't recognize the domain
+                params = {"text": target_raw}
+                executor_action = "click"
+        else:
+            # Default: click by visible text
+            params = {"text": target_raw}
+            executor_action = "click"
     
     # Execute the action
     result = action_executor.execute(executor_action, params)
