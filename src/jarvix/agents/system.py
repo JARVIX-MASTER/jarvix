@@ -709,6 +709,14 @@ def execute_command(cmd_json):
         from jarvix.features.gmail import GmailClient
         return GmailClient().get_promotional_emails()
     
+    elif action == "get_payment_reminders":
+        from jarvix.features.gmail import GmailClient
+        return GmailClient().get_payment_reminders()
+    
+    elif action == "get_subscription_alerts":
+        from jarvix.features.gmail import GmailClient
+        return GmailClient().get_subscription_alerts()
+    
     # --- WEB AUTOMATION ACTIONS ---
     elif action == "web_search":
         from jarvix.features.web_automation import run_web_search

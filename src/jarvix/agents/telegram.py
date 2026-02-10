@@ -68,6 +68,7 @@ def get_main_keyboard():
         [KeyboardButton("/focus_mode_on"), KeyboardButton("/blacklist")],
         # --- GMAIL SHORTCUTS ---
         [KeyboardButton("/emails"), KeyboardButton("/upcoming"), KeyboardButton("/unsubscribe")],
+        [KeyboardButton("/payments"), KeyboardButton("/subscriptions")],
         # --- WEB AUTOMATION SHORTCUTS ---
         [KeyboardButton("/search"), KeyboardButton("/browse"), KeyboardButton("/addcart")],
         [KeyboardButton("/fill_form"), KeyboardButton("/browser_screenshot")],
@@ -714,18 +715,22 @@ Longitude: {location_data['longitude']}
 📁 Categories:
 • 🎯 Interview Related: {summary.get('interview', 0)}
 • 📅 Upcoming Interviews: {summary.get('upcoming_interview', 0)}
+• 💳 Payment Reminders: {summary.get('payment_reminder', 0)}
+• 🔔 Subscription Alerts: {summary.get('subscription_alert', 0)}
 • 🏷️ Promotional: {summary.get('promotional', 0)}
 • 📨 General: {summary.get('general', 0)}
 
 Quick Commands:
 • /upcoming - View upcoming interviews
+• /payments - View payment reminders
+• /subscriptions - View subscription alerts
 • /unsubscribe - View promotional emails
 """
             
             # Show some recent interview emails if any
             interview_emails = email_data.get("interview", []) + email_data.get("upcoming_interview", [])
             if interview_emails:
-                summary_text += "\n🎯 Recent Interview Emails:\n"
+                # summary_text += "\n🎯 Recent Interview Emails:\n"
                 for em in interview_emails[:3]:
                     subj = escape_markdown(em.get('subject', 'No Subject')[:50])
                     summary_text += f"• {subj}...\n"
@@ -844,6 +849,107 @@ Quick Commands:
                 for em in without_unsub[:5]:
                     subj = escape_markdown(em.get('subject', 'No Subject')[:50])
                     message_text += f"• {subj}\n"
+            
+            try:
+                await loader.edit_text(message_text, reply_markup=get_main_keyboard())
+            except Exception as e:
+                print(f"Edit text error: {e}")
+                await loader.delete()
+                await update.message.reply_text(message_text, reply_markup=get_main_keyboard())
+
+        # --- PAYMENT REMINDER HANDLER ---
+        elif action == "get_payment_reminders":
+            if status_msg: await status_msg.delete()
+            loader = await update.message.reply_text("💳 Checking for payment reminders...", reply_markup=get_main_keyboard())
+            
+            loop = asyncio.get_running_loop()
+            payment_data = await loop.run_in_executor(None, execute_command, command_json)
+            
+            if payment_data is None:
+                try:
+                    await loader.edit_text("❌ Failed to connect to Gmail. Check credentials in .env", reply_markup=get_main_keyboard())
+                except:
+                    await loader.delete()
+                    await update.message.reply_text("❌ Failed to connect to Gmail. Check credentials in .env", reply_markup=get_main_keyboard())
+                return
+            
+            payment_emails = payment_data.get("payment_emails", [])
+            total = payment_data.get("total", 0)
+            
+            if total == 0:
+                try:
+                    await loader.edit_text("💳 No payment reminders found.\n\nNo upcoming bills or payment due emails were found in your recent inbox.", reply_markup=get_main_keyboard())
+                except:
+                    await loader.delete()
+                    await update.message.reply_text("💳 No payment reminders found.\n\nNo upcoming bills or payment due emails were found.", reply_markup=get_main_keyboard())
+                return
+            
+            message_text = f"💳 PAYMENT REMINDERS ({total} found)\n\n"
+            
+            for em in payment_emails[:8]:
+                subj = escape_markdown(em.get('subject', 'No Subject')[:60])
+                sender = escape_markdown(em.get('sender', 'Unknown').split('<')[0].strip()[:25])
+                date = em.get('date', 'Unknown')
+                amounts = em.get('amounts', [])
+                due_dates = em.get('extracted_dates', [])
+                
+                message_text += f"📌 {subj}\n"
+                message_text += f"   📤 From: {sender}\n"
+                message_text += f"   📅 Received: {date}\n"
+                if amounts:
+                    message_text += f"   💰 Amount: {', '.join(amounts[:2])}\n"
+                if due_dates:
+                    message_text += f"   ⏰ Due: {', '.join(due_dates[:2])}\n"
+                message_text += "\n"
+            
+            try:
+                await loader.edit_text(message_text, reply_markup=get_main_keyboard())
+            except Exception as e:
+                print(f"Edit text error: {e}")
+                await loader.delete()
+                await update.message.reply_text(message_text, reply_markup=get_main_keyboard())
+
+        # --- SUBSCRIPTION ALERT HANDLER ---
+        elif action == "get_subscription_alerts":
+            if status_msg: await status_msg.delete()
+            loader = await update.message.reply_text("🔔 Checking for subscription alerts...", reply_markup=get_main_keyboard())
+            
+            loop = asyncio.get_running_loop()
+            sub_data = await loop.run_in_executor(None, execute_command, command_json)
+            
+            if sub_data is None:
+                try:
+                    await loader.edit_text("❌ Failed to connect to Gmail. Check credentials in .env", reply_markup=get_main_keyboard())
+                except:
+                    await loader.delete()
+                    await update.message.reply_text("❌ Failed to connect to Gmail. Check credentials in .env", reply_markup=get_main_keyboard())
+                return
+            
+            sub_emails = sub_data.get("subscription_emails", [])
+            total = sub_data.get("total", 0)
+            
+            if total == 0:
+                try:
+                    await loader.edit_text("🔔 No subscription alerts found.\n\nNo upcoming renewals or cancellation reminders were found in your recent inbox.", reply_markup=get_main_keyboard())
+                except:
+                    await loader.delete()
+                    await update.message.reply_text("🔔 No subscription alerts found.\n\nNo upcoming renewals or cancellation reminders were found.", reply_markup=get_main_keyboard())
+                return
+            
+            message_text = f"🔔 SUBSCRIPTION ALERTS ({total} found)\n\n"
+            
+            for em in sub_emails[:8]:
+                subj = escape_markdown(em.get('subject', 'No Subject')[:60])
+                sender = escape_markdown(em.get('sender', 'Unknown').split('<')[0].strip()[:25])
+                date = em.get('date', 'Unknown')
+                alert_dates = em.get('extracted_dates', [])
+                
+                message_text += f"📌 {subj}\n"
+                message_text += f"   📤 From: {sender}\n"
+                message_text += f"   📅 Received: {date}\n"
+                if alert_dates:
+                    message_text += f"   ⏰ Date: {', '.join(alert_dates[:2])}\n"
+                message_text += "\n"
             
             try:
                 await loader.edit_text(message_text, reply_markup=get_main_keyboard())

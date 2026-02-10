@@ -26,6 +26,10 @@ SYNONYMS = {
     "upcoming": ["interviews", "upcoming interviews", "scheduled interviews", "interview schedule"],
     "unsubscribe": ["promotional", "spam", "promotions", "marketing emails"],
     
+    # Payments & Subscriptions
+    "payments": ["payment reminders", "bills due", "upcoming payments", "my bills", "pending payments", "emi due"],
+    "subscriptions": ["subscription alerts", "renewal alerts", "subscriptions expiring", "my subscriptions", "renewal reminders"],
+    
     # Web
     "search": ["google", "look up", "look for", "find online", "search for", "search the web", "web search"],
     "browse": ["open website", "go to", "visit", "navigate to", "open url", "open site"],
@@ -108,6 +112,14 @@ COMMAND_PATTERNS = {
     "get_promotional": {
         "triggers": ["promotional", "spam", "unsubscribe", "marketing emails", "/unsubscribe", "/promotional"],
         "action": {"action": "get_promotional"}
+    },
+    "get_payment_reminders": {
+        "triggers": ["payment reminders", "upcoming payments", "bills due", "my bills", "pending payments", "emi due", "payment due", "/payments"],
+        "action": {"action": "get_payment_reminders"}
+    },
+    "get_subscription_alerts": {
+        "triggers": ["subscription alerts", "renewal alerts", "subscriptions expiring", "my subscriptions", "renewal reminders", "subscription renewal", "/subscriptions"],
+        "action": {"action": "get_subscription_alerts"}
     },
     
     # --- WEB AUTOMATION ---

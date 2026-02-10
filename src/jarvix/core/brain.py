@@ -79,7 +79,13 @@ COMMANDS:
 21. Promotional/Unsubscribe: {"action": "get_promotional"}
     (Triggers: promotional emails, spam, unsubscribe, cancel subscriptions, marketing emails)
 
-22. Web Search: {"action": "web_search", "query": "search terms here"}
+22. Payment Reminders: {"action": "get_payment_reminders"}
+    (Triggers: payment reminders, upcoming payments, bills due, my bills, pending payments, emi due)
+
+23. Subscription Alerts: {"action": "get_subscription_alerts"}
+    (Triggers: subscription alerts, renewal alerts, subscriptions expiring, my subscriptions, renewal reminders)
+
+24. Web Search: {"action": "web_search", "query": "search terms here"}
     (Triggers: search for, google, look up, find online, search the web, web search)
 
 23. Browse URL: {"action": "browse_url", "url": "https://example.com"}
@@ -199,6 +205,14 @@ def process_command(user_input):
             data = {"action": "get_upcoming_interviews"}
         elif any(x in lower for x in ["/unsubscribe", "/promotional", "promotional emails", "spam", "unsubscribe", "cancel subscriptions", "marketing emails"]):
             data = {"action": "get_promotional"}
+
+        # 12. Force Payment Reminders
+        elif any(x in lower for x in ["/payments", "payment reminders", "upcoming payments", "bills due", "my bills", "pending payments", "emi due", "payment due"]):
+            data = {"action": "get_payment_reminders"}
+
+        # 13. Force Subscription Alerts
+        elif any(x in lower for x in ["/subscriptions", "subscription alerts", "renewal alerts", "subscriptions expiring", "my subscriptions", "renewal reminders", "subscription renewal"]):
+            data = {"action": "get_subscription_alerts"}
 
         # 12. Force Find File (Context-Aware File Finder)
         # Detect file finding queries - "find that", "get me that", "send that", "that file", etc.
