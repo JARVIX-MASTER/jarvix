@@ -8,7 +8,7 @@ Thank you for your interest in contributing to JARVIX!
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-repo/jarvix-assistant.git
+git clone https://github.com/JARVIX-MASTER/jarvix
 cd jarvix-assistant
 
 # Create development branch

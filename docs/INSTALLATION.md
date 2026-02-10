@@ -18,7 +18,7 @@ The fastest way to get started:
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-repo/jarvix-assistant.git
+git clone https://github.com/JARVIX-MASTER/jarvix
 cd jarvix-assistant
 
 # Run the installer
@@ -50,7 +50,7 @@ winget install Ollama.Ollama
 ### Step 2: Clone & Setup
 
 ```bash
-git clone https://github.com/your-repo/jarvix-assistant.git
+git clone https://github.com/JARVIX-MASTER/jarvix
 cd jarvix-assistant
 
 # Create virtual environment
