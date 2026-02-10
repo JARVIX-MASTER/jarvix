@@ -302,7 +302,12 @@ class KeywordMatcher:
                 
                 # Check if we need to extract entities
                 if "extract_pattern" in config:
-                    return self._extract_and_build(text, text_normalized, config)
+                    action = self._extract_and_build(text, text_normalized, config)
+                    # Only return if we successfully built an action. If extraction
+                    # fails (e.g. pattern doesn't match), keep searching so other
+                    # commands like browser_navigate can still handle the text.
+                    if action:
+                        return action
                 else:
                     # Simple action, no extraction needed
                     return config.get("action", {}).copy()

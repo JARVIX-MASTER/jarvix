@@ -4,6 +4,7 @@ Converts natural language goals into structured action plans.
 """
 
 import json
+import os
 import re
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, field
@@ -345,11 +346,19 @@ class GoalPlanner:
     
     def _llm_plan(self, goal: str) -> ActionPlan:
         """Use LLM to create plan for complex goals."""
+        # Allow disabling LLM planning entirely via environment.
+        use_llm = os.getenv("PLANNER_USE_LLM", "false").lower() in ("1", "true", "yes", "on")
+        if not use_llm:
+            print("⚠️ LLM planner disabled via PLANNER_USE_LLM. Using fallback plan.")
+            return self._fallback_plan(goal)
+
+        model_name = os.getenv("PLANNER_MODEL_NAME", "qwen2.5-coder:7b")
+
         try:
             import ollama
             
             response = ollama.chat(
-                model="qwen2.5-coder:7b",
+                model=model_name,
                 messages=[
                     {"role": "system", "content": PLANNER_SYSTEM_PROMPT},
                     {"role": "user", "content": f"Create an action plan for: {goal}"}
@@ -372,14 +381,22 @@ class GoalPlanner:
                         description=step_data.get("description", "")
                     ))
                 
-                return ActionPlan(
-                    goal=plan_data.get("goal", goal),
-                    steps=steps
-                )
+                if steps:
+                    return ActionPlan(
+                        goal=plan_data.get("goal", goal),
+                        steps=steps
+                    )
         except Exception as e:
             print(f"⚠️ LLM planning failed: {e}")
         
         # Fallback: simple navigate plan
+        return self._fallback_plan(goal)
+
+    def _fallback_plan(self, goal: str) -> ActionPlan:
+        """Fallback plan when LLM is disabled or fails.
+        
+        For now this simply opens Google so the user can search manually.
+        """
         return ActionPlan(
             goal=goal,
             steps=[ActionStep(

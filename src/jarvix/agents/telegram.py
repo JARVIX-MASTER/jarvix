@@ -1190,6 +1190,16 @@ Quick Commands:
                         await update.message.reply_text(message, parse_mode='Markdown', reply_markup=get_main_keyboard())
                 else:
                     await update.message.reply_text(message, parse_mode='Markdown', reply_markup=get_main_keyboard())
+
+                # Suggest next possible browser continuation commands
+                hints = (
+                    "💡 You can continue with commands like:\n"
+                    "• `click on first result`\n"
+                    "• `scroll down`\n"
+                    "• `type my address`\n"
+                    "• `/browser_screenshot`"
+                )
+                await update.message.reply_text(hints, reply_markup=get_main_keyboard())
             else:
                 # Build error message
                 message = f"⚠️ **Goal Partially Completed**\n\n🎯 {result.goal}\n\n"
